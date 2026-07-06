@@ -2,6 +2,10 @@
 #include "../include/Logcat.h"
 #include "../include/Kernel.h"
 #include "../include/VirtualProcess.h"
+
+// 前向声明，在format中需要使用
+static int createPasswdFile(VFS *vfs);
+
 VFS::VFS()
 {
 }
