@@ -4,7 +4,7 @@
 #include "DiskBlock.h"
 #include "DiskInode.h"
 const int devno = 12;
-#define DEF_MODE S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH
+#define DEF_MODE 0644  // rw-r--r--
 /**
  * DiskDriver类：
  * 操纵linux系统调用。本程序的最底层。

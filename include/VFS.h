@@ -40,6 +40,7 @@ public:
   void bindInodeCache(InodeCache *inodeCache);
   void bindDirectoryInodeCache(DirectoryCache *directoryCache);
   bool isMounted();
+  Ext2* getExt2() { return p_ext2; }
   //Path convertPathToAbsolute(Path &path);
 };
 

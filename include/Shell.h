@@ -50,6 +50,8 @@ public:
   void store();
   void withdraw();
   void clear();
+  void chmod();
+  void chown();
   //隐式调用
   //void creat();
   //void open();
