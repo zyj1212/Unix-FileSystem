@@ -1,3 +1,19 @@
-{
-    "C_Cpp.intelliSenseEngineFallback": "Enabled"
+qi'lai{
+    "C_Cpp.intelliSenseEngineFallback": "Enabled",
+    "C_Cpp.default.cppStandard": "c++11",
+    "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+    "editor.formatOnSave": false,
+    "files.associations": {
+        "*.h": "cpp",
+        "iostream": "cpp",
+        "cstring": "cpp",
+        "string": "cpp",
+        "stdint.h": "cpp",
+        "fstream": "cpp",
+        "functional": "cpp",
+        "sstream": "cpp",
+        "cstdlib": "cpp",
+        "cstdio": "cpp",
+        "cmath": "cpp"
+    }
 }
