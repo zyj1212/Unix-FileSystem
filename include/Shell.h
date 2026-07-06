@@ -50,6 +50,9 @@ public:
   void store();
   void withdraw();
   void clear();
+  void login();
+  void useradd();
+  void whoami();
   //隐式调用
   //void creat();
   //void open();

@@ -63,6 +63,8 @@ int VFS::format()
             break;
         case Ext2_NOFORM:
             p_ext2->format();
+            // 格式化后自动创建 /etc/passwd
+            createPasswdFile(this);
             break;
         case Ext2_READY:
             printf("WARNING!磁盘可能已有数据！确定要格式化吗？\n");
@@ -73,6 +75,8 @@ int VFS::format()
                 if (temp_cmd == 'y')
                 {
                     p_ext2->format();
+                    // 格式化后自动创建 /etc/passwd
+                    createPasswdFile(this);
                     break;
                 }
                 else if (temp_cmd == 'n')
@@ -92,6 +96,48 @@ int VFS::format()
     }
     return OK;
 }
+
+/* ========== 在ext2格式化完成后，用VFS高层创建/etc/passwd ========== */
+static int createPasswdFile(VFS *vfs)
+{
+    // 保存当前目录，切换到 /etc
+    InodeId oldDir = VirtualProcess::Instance()->getUser().curDirInodeId;
+    Path etcPath("/etc");
+    if (vfs->cd("etc") < 0) {
+        return -1;
+    }
+
+    // 创建 passwd 文件
+    InodeId newFileId = vfs->createFile("passwd");
+    if (newFileId < 0) {
+        VirtualProcess::Instance()->getUser().curDirInodeId = oldDir;
+        return -1;
+    }
+
+    // 打开并写入 root 用户: root:root:0:0
+    Path passwdPath("passwd");
+    FileFd fd = vfs->open(passwdPath, File::FWRITE);
+    if (fd < 0) {
+        VirtualProcess::Instance()->getUser().curDirInodeId = oldDir;
+        return -1;
+    }
+
+    const char *rootLine = "root:root:0:0\n";
+    vfs->write(fd, (u_int8_t*)rootLine, strlen(rootLine));
+    vfs->close(fd);
+
+    // 设置文件大小
+    Inode *pInode = Kernel::instance()->getInodeCache().getInodeByID(newFileId);
+    if (pInode) {
+        pInode->i_size = strlen(rootLine);
+        pInode->i_flag |= Inode::IUPD;
+    }
+
+    // 恢复当前目录
+    VirtualProcess::Instance()->getUser().curDirInodeId = oldDir;
+    return 0;
+}
+
 /**
  * 在当前目录下创建文件，
  * 文件名为fileName,返回新创建文件的inodeId

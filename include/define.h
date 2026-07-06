@@ -68,9 +68,12 @@ enum INSTRUCT
     VERSION,
     STORE,
     WITHDRAW,
-    RMDIR
+    RMDIR,
+    LOGIN,
+    USERADD,
+    WHOAMI
 };
-const int INST_NUM = 16;
+const int INST_NUM = 19;
 //NOTE 注意，如果改了上面的枚举类型，那么下面的这个数字也需要相应修改
 
 static const char *instructStr[]{
@@ -89,7 +92,10 @@ static const char *instructStr[]{
     "version",
     "store",
     "withdraw",
-    "rmdir"};
+    "rmdir",
+    "login",
+    "useradd",
+    "whoami"};
 enum FileType
 {
     NORMAL_FILE,
