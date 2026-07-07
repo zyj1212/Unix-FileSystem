@@ -11,6 +11,7 @@ void Shell::help()
 int Shell::readUserInput()
 {
     Logcat::log("建议先输入help指令，查看使用说明");
+    history_count = 0;
     while (true)
     {
         //Step0:
@@ -26,6 +27,28 @@ int Shell::readUserInput()
         //Step1:获取用户输入放到缓冲区
 
         std::cin.getline(tty_buffer, MAX_CMD_LEN, '\n');
+
+        // 如果输入为空，跳过
+        if (strlen(tty_buffer) == 0)
+        {
+            continue;
+        }
+
+        // 记录历史命令
+        if (history_count < HISTORY_MAX)
+        {
+            strcpy(history_buf[history_count], tty_buffer);
+            history_count++;
+        }
+        else
+        {
+            // 循环覆盖最旧的记录
+            for (int i = 1; i < HISTORY_MAX; i++)
+            {
+                strcpy(history_buf[i - 1], history_buf[i]);
+            }
+            strcpy(history_buf[HISTORY_MAX - 1], tty_buffer);
+        }
 
         //Step2:先将tab转换为space
         for (char *checker = strrchr(tty_buffer, '\t'); checker != NULL; checker = strrchr(checker, '\t'))
@@ -68,7 +91,53 @@ int Shell::readUserInput()
 
 void Shell::parseCmd()
 {
-    switch (getInstType())
+    // 先尝试精确匹配
+    INSTRUCT inst = getInstType();
+    
+    if (inst == ERROR_INST)
+    {
+        // 精确匹配失败，尝试前缀补全匹配
+        char *instStr = getInstStr();
+        int match_count = 0;
+        int match_index = -1;
+        
+        for (int i = 1; i < INST_NUM; i++)
+        {
+            if (strncmp(instructStr[i], instStr, strlen(instStr)) == 0)
+            {
+                match_count++;
+                match_index = i;
+            }
+        }
+        
+        if (match_count == 1)
+        {
+            // 唯一匹配，自动补全并执行
+            printf("（自动补全: %s）\n", instructStr[match_index]);
+            inst = INSTRUCT(match_index - 1);
+        }
+        else if (match_count > 1)
+        {
+            // 多个匹配，列出所有可能的命令
+            printf("（未匹配命令 \"%s\"，您是否想输入：", instStr);
+            for (int i = 1; i < INST_NUM; i++)
+            {
+                if (strncmp(instructStr[i], instStr, strlen(instStr)) == 0)
+                {
+                    printf("%s ", instructStr[i]);
+                }
+            }
+            printf("）\n");
+            return;
+        }
+        else
+        {
+            Logcat::log("CMD NOT SUPPORTED!\n");
+            return;
+        }
+    }
+
+    switch (inst)
     {
     case MOUNT:
         mount(); //OK
@@ -129,6 +198,12 @@ void Shell::parseCmd()
         break;
     case CHOWN:
         chown();
+        break;
+    case DIR:
+        dir();
+        break;
+    case HISTORY:
+        history();
         break;
     default:
         Logcat::log("CMD NOT SUPPORTED!\n");
@@ -746,9 +821,32 @@ void Shell::chown()
     Logcat::log("文件所有者修改成功！");
 }
 
+void Shell::dir()
+{
+    if (!strcmp(getParam(1), ""))
+    {
+        //不带参数的dir，以curDir为默认参数
+        bounded_VFS->dir(VirtualProcess::Instance()->getUser().curDirInodeId);
+    }
+    else
+    {
+        bounded_VFS->dir(getParam(1));
+    }
+}
+
+void Shell::history()
+{
+    printf("  History:\n");
+    for (int i = 0; i < history_count; i++)
+    {
+        printf("%3d  %s\n", i + 1, history_buf[i]);
+    }
+}
+
 Shell::Shell()
 {
     TAG = strdup("Shell");
+    history_count = 0;
 }
 Shell::~Shell()
 {

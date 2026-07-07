@@ -446,6 +446,89 @@ void VFS::ls(const char *dirName)
     }
 }
 
+void VFS::dir(InodeId dirInodeID)
+{
+    Inode &inode = *inodeCache->getInodeByID(dirInodeID);
+    if ((inode.i_mode & Inode::IFMT) != Inode::IFDIR)
+    {
+        printf("ERROR! dir的参数只能为空或者目录名！\n");
+        return;
+    }
+
+    inode.i_flag |= Inode::IACC;
+    int blkno = inode.Bmap(0);
+    Buf *pBuf;
+    pBuf = Kernel::instance()->getBufferCache().Bread(blkno);
+    DirectoryEntry *p_directoryEntry = (DirectoryEntry *)pBuf->b_addr;
+
+    printf("%-28s  %-10s  %-10s  %s\n", "文件名", "物理地址", "保护码", "文件长度");
+    printf("---------------------------------------------------------------------\n");
+
+    for (int i = 0; i < DISK_BLOCK_SIZE / sizeof(DirectoryEntry); i++)
+    {
+        if (p_directoryEntry->m_ino != 0)
+        {
+            Inode *p_fileInode = inodeCache->getInodeByID(p_directoryEntry->m_ino);
+
+            // 文件名
+            printf("%-28s  ", p_directoryEntry->m_name);
+
+            // 物理地址：第一个数据块的物理块号
+            int firstBlk = p_fileInode->Bmap(0);
+            if (firstBlk <= 0)
+                printf("%-10s  ", "-");
+            else
+                printf("%-10d  ", firstBlk);
+
+            // 保护码：将i_mode格式化为类似Unix的权限字符串
+            char modeStr[11];
+            // 文件类型
+            if ((p_fileInode->i_mode & Inode::IFMT) == Inode::IFDIR)
+                modeStr[0] = 'd';
+            else if ((p_fileInode->i_mode & Inode::IFMT) == Inode::IFCHR)
+                modeStr[0] = 'c';
+            else if ((p_fileInode->i_mode & Inode::IFMT) == Inode::IFBLK)
+                modeStr[0] = 'b';
+            else
+                modeStr[0] = '-';
+
+            // 权限位
+            modeStr[1] = 'r';
+            modeStr[2] = 'w';
+            modeStr[3] = 'x';
+            modeStr[4] = 'r';
+            modeStr[5] = 'w';
+            modeStr[6] = 'x';
+            modeStr[7] = 'r';
+            modeStr[8] = 'w';
+            modeStr[9] = 'x';
+            modeStr[10] = '\0';
+
+            printf("%-10s  ", modeStr);
+
+            // 文件长度
+            printf("%d\n", p_fileInode->i_size);
+        }
+        p_directoryEntry++;
+    }
+    Kernel::instance()->getBufferCache().Brelse(pBuf);
+}
+
+void VFS::dir(const char *dirName)
+{
+    InodeId dirInodeId;
+    Path path(dirName);
+    dirInodeId = p_ext2->locateInode(path);
+    if ((inodeCache->getInodeByID(dirInodeId)->i_mode & Inode::IFMT) == Inode::IFDIR)
+    {
+        dir(dirInodeId);
+    }
+    else
+    {
+        Logcat::log("ERROR!dir指令只能对目录");
+    }
+}
+
 /**
  * 打开一个普通文件,返回文件的句柄
  */
