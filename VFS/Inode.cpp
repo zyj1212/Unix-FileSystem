@@ -37,168 +37,162 @@ int Inode::Bmap(int lbn)
 {
 
     int phyBlkno; /* 转换后的物理盘块号 */
-    int *iTable;  /* 用于访问索引盘块中一次间接、两次间接索引表 */
+    int *iTable;  /* 用于访问索引盘块中各级间接索引表 */
     int index;
-    //User &u = Kernel::Instance().GetUser();
+    Buf *pFirstBuf, *pSecondBuf;
 
-    /**
-     * 超出支持的最大文件块数
-     */
-    if (lbn >= Inode::HUGE_FILE_BLOCK)
+    // 超出支持的最大文件块数
+    if (lbn >= Inode::MAX_FILE_BLOCK)
     {
-        //u.u_error = User::EFBIG;
         return ERROR_LBN_OVERFLOW;
     }
 
-    if (lbn < 6) /* 如果是小型文件，从基本索引表i_addr[0-5]中获得物理盘块号即可 */
+    // ===== 直接索引: lbn < 12 =====
+    if (lbn < Inode::SMALL_FILE_BLOCK)
     {
         phyBlkno = this->i_addr[lbn];
-
-        /*
-    	 * 如果该逻辑块号还没有相应的物理盘块号与之对应，则分配一个物理块。
-    	 * 这通常发生在对文件的写入，当写入位置超出文件大小，即对当前
-    	 * 文件进行扩充写入，就需要分配额外的磁盘块，并为之建立逻辑块号
-    	 * 与物理盘块号之间的映射。
-    	 */
         if (phyBlkno == 0)
         {
             phyBlkno = Kernel::instance()->getSuperBlockCache().balloc();
             if (phyBlkno == -1)
             {
-                //分配失败。可能没有空闲空间了
+                return ERROR_OUTOF_BLOCK;
             }
-            else
-            {
-                //分配盘块成功，这里的superblock已经改过了哟
-                //bufMgr.Bdwrite(pFirstBuf);
-                //phyBlkno = pFirstBuf->b_blkno;
-                /* 将逻辑块号lbn映射到物理盘块号phyBlkno */
-                this->i_addr[lbn] = phyBlkno;
-                this->i_flag |= Inode::IUPD;
-            }
-            /*
-    		 * 因为后面很可能马上还要用到此处新分配的数据块，所以不急于立刻输出到
-    		 * 磁盘上；而是将缓存标记为延迟写方式，这样可以减少系统的I/O操作。
-    		 */
+            this->i_addr[lbn] = phyBlkno;
+            this->i_flag |= Inode::IUPD;
         }
-
         return phyBlkno;
     }
-    else /* lbn >= 6 大型、巨型文件 */
+
+    // ===== 间接索引: lbn >= 12 =====
+    // 确定 i_addr 中的索引位置
+    if (lbn < Inode::LARGE_FILE_BLOCK)
     {
-        
-        Buf *pFirstBuf,*pSecondBuf;
-        /* 计算逻辑块号lbn对应i_addr[]中的索引 */
+        index = Inode::SINGLE_INDIRECT_IDX;  // i_addr[12] — 单间接
+    }
+    else if (lbn < Inode::HUGE_FILE_BLOCK)
+    {
+        index = Inode::DOUBLE_INDIRECT_IDX;  // i_addr[13] — 双间接
+    }
+    else
+    {
+        index = Inode::TRIPLE_INDIRECT_IDX;  // i_addr[14] — 三间接
+    }
 
-        // if(lbn==1048){
-        //     printf("终于等到你");
-        // }
-        if (lbn < Inode::LARGE_FILE_BLOCK) // 大型文件
+    // 读取/分配第一级索引块
+    phyBlkno = this->i_addr[index];
+    if (0 == phyBlkno)
+    {
+        this->i_flag |= Inode::IUPD;
+        int newBlkNum = Kernel::instance()->getSuperBlockCache().balloc();
+        if (newBlkNum < 0)
         {
-            index = (lbn - Inode::SMALL_FILE_BLOCK) / Inode::ADDRESS_PER_INDEX_BLOCK + 6;
+            return ERROR_OUTOF_BLOCK;
         }
-        else /* 巨型文件: 长度介于263 - (128 * 128 * 2 + 128 * 2 + 6)个盘块之间 */
+        this->i_addr[index] = newBlkNum;
+        pFirstBuf = Kernel::instance()->getBufferCache().GetBlk(newBlkNum);
+    }
+    else
+    {
+        pFirstBuf = Kernel::instance()->getBufferCache().Bread(phyBlkno);
+    }
+    iTable = (int *)pFirstBuf->b_addr;
+
+    // ===== 第二层索引: 双间接或三间接 =====
+    if (index >= Inode::DOUBLE_INDIRECT_IDX) // 13 或 14
+    {
+        int outerIndex;
+        if (index == Inode::TRIPLE_INDIRECT_IDX)
         {
-            index = (lbn - Inode::LARGE_FILE_BLOCK) / (Inode::ADDRESS_PER_INDEX_BLOCK * Inode::ADDRESS_PER_INDEX_BLOCK) + 8;
+            // 三间接: 三级索引块 → 二级索引块
+            outerIndex = (lbn - Inode::HUGE_FILE_BLOCK) /
+                         (Inode::ADDRESS_PER_INDEX_BLOCK * Inode::ADDRESS_PER_INDEX_BLOCK);
+        }
+        else
+        {
+            // 双间接: 二级索引块 → 一级索引块
+            outerIndex = (lbn - Inode::LARGE_FILE_BLOCK) / Inode::ADDRESS_PER_INDEX_BLOCK;
         }
 
-        phyBlkno = this->i_addr[index];
-        /* 若该项为零，则表示不存在相应的间接索引表块 */
+        phyBlkno = iTable[outerIndex];
         if (0 == phyBlkno)
         {
-            this->i_flag |= Inode::IUPD;
-            int newBlkNum = Kernel::instance()->getSuperBlockCache().balloc();
-            /* 分配一空闲盘块存放间接索引表 */
-            if (newBlkNum<0)
+            BlkNum newBlkNum = Kernel::instance()->getSuperBlockCache().balloc();
+            if (newBlkNum < 0)
             {
-                return ERROR_OUTOF_BLOCK; /* 分配失败 */
-            }
-            /* i_addr[index]中记录间接索引表的物理盘块号 */
-            this->i_addr[index] = newBlkNum;
-            pFirstBuf=Kernel::instance()->getBufferCache().GetBlk(newBlkNum);
-        }
-        else
-        {
-            /* 读出存储间接索引表的字符块 */
-            pFirstBuf = Kernel::instance()->getBufferCache().Bread(phyBlkno);
-
-        }
-        /* 获取缓冲区首址 */
-        iTable = (int *)pFirstBuf->b_addr;
-
-        if (index >= 8) /* ASSERT: 8 <= index <= 9 */
-        {
-            /*
-    		 * 对于巨型文件的情况，pFirstBuf中是二次间接索引表，
-    		 * 还需根据逻辑块号，经由二次间接索引表找到一次间接索引表
-    		 */
-            index = ((lbn - Inode::LARGE_FILE_BLOCK) / Inode::ADDRESS_PER_INDEX_BLOCK) % Inode::ADDRESS_PER_INDEX_BLOCK;
-
-            /* iTable指向缓存中的二次间接索引表。该项为零，不存在一次间接索引表 */
-            phyBlkno = iTable[index];
-            if (0 == phyBlkno)
-            {
-                BlkNum newBlkNum = Kernel::instance()->getSuperBlockCache().balloc();
-                if (newBlkNum<0)
-                {
-                    /* 分配一次间接索引表磁盘块失败，释放缓存中的二次间接索引表，然后返回 */
-                    Kernel::instance()->getSuperBlockCache().bfree(newBlkNum);
-                    //bufMgr.Brelse(pFirstBuf);
-                    return ERROR_OUTOF_BLOCK;
-                }
-                /* 将新分配的一次间接索引表磁盘块号，记入二次间接索引表相应项 */
-                iTable[index] = newBlkNum;
-                pSecondBuf=Kernel::instance()->getBufferCache().GetBlk(newBlkNum);
-                /* 将更改后的二次间接索引表延迟写方式输出到磁盘 */
-                Kernel::instance()->getBufferCache().Bdwrite(pFirstBuf);
-            }
-            else
-            {
-                /* 释放1次间接索引表占用的缓存，并读入2次间接索引表 */
                 Kernel::instance()->getBufferCache().Brelse(pFirstBuf);
-                pSecondBuf = Kernel::instance()->getBufferCache().Bread(phyBlkno);
+                return ERROR_OUTOF_BLOCK;
             }
-
-            pFirstBuf = pSecondBuf;
-            /* 令iTable指向一次间接索引表 */
-            iTable = (int *)pSecondBuf->b_addr;
-        }
-
-        /* 计算逻辑块号lbn最终位于一次间接索引表中的表项序号index */
-
-        if (lbn < Inode::LARGE_FILE_BLOCK)
-        {
-            index = (lbn - Inode::SMALL_FILE_BLOCK) % Inode::ADDRESS_PER_INDEX_BLOCK;
-        }
-        else
-        {
-            index = (lbn - Inode::LARGE_FILE_BLOCK) % Inode::ADDRESS_PER_INDEX_BLOCK;
-        }
-
-
-        int newBlk3;
-        if ((phyBlkno = iTable[index]) == 0 && (newBlk3 = Kernel::instance()->getSuperBlockCache().balloc()) >= 0)
-        {
-            /* 将分配到的文件数据盘块号登记在一次间接索引表中 */
-            phyBlkno = newBlk3;
-            iTable[index] = phyBlkno;
-            /* 将数据盘块、更改后的一次间接索引表用延迟写方式输出到磁盘 */
-            pSecondBuf=Kernel::instance()->getBufferCache().GetBlk(newBlk3);
-            Kernel::instance()->getBufferCache().Bdwrite(pSecondBuf);
+            iTable[outerIndex] = newBlkNum;
+            pSecondBuf = Kernel::instance()->getBufferCache().GetBlk(newBlkNum);
             Kernel::instance()->getBufferCache().Bdwrite(pFirstBuf);
         }
         else
         {
-            /* 释放一次间接索引表占用缓存 */
             Kernel::instance()->getBufferCache().Brelse(pFirstBuf);
+            pSecondBuf = Kernel::instance()->getBufferCache().Bread(phyBlkno);
         }
-        /* 找到预读块对应的物理盘块号，如果获取预读块号需要额外的一次for间接索引块的IO，不合算，放弃 */
-        // Inode::rablock = 0;
-        // if (index + 1 < Inode::ADDRESS_PER_INDEX_BLOCK)
-        // {
-        //     Inode::rablock = iTable[index + 1];
-        // }
-        return phyBlkno;
+        pFirstBuf = pSecondBuf;
+        iTable = (int *)pFirstBuf->b_addr;
     }
-} //根据逻辑块号查混合索引表，得到物理块号。
+
+    // ===== 第三层索引: 仅三间接 =====
+    if (index == Inode::TRIPLE_INDIRECT_IDX)
+    {
+        // 二级索引块 → 一级索引块
+        int midIndex = ((lbn - Inode::HUGE_FILE_BLOCK) / Inode::ADDRESS_PER_INDEX_BLOCK) %
+                       Inode::ADDRESS_PER_INDEX_BLOCK;
+
+        phyBlkno = iTable[midIndex];
+        if (0 == phyBlkno)
+        {
+            BlkNum newBlkNum = Kernel::instance()->getSuperBlockCache().balloc();
+            if (newBlkNum < 0)
+            {
+                Kernel::instance()->getBufferCache().Brelse(pFirstBuf);
+                return ERROR_OUTOF_BLOCK;
+            }
+            iTable[midIndex] = newBlkNum;
+            pSecondBuf = Kernel::instance()->getBufferCache().GetBlk(newBlkNum);
+            Kernel::instance()->getBufferCache().Bdwrite(pFirstBuf);
+        }
+        else
+        {
+            Kernel::instance()->getBufferCache().Brelse(pFirstBuf);
+            pSecondBuf = Kernel::instance()->getBufferCache().Bread(phyBlkno);
+        }
+        pFirstBuf = pSecondBuf;
+        iTable = (int *)pFirstBuf->b_addr;
+    }
+
+    // ===== 最终层: 一级索引表 → 数据块 =====
+    if (lbn < Inode::LARGE_FILE_BLOCK)
+    {
+        index = (lbn - Inode::SMALL_FILE_BLOCK) % Inode::ADDRESS_PER_INDEX_BLOCK;
+    }
+    else if (lbn < Inode::HUGE_FILE_BLOCK)
+    {
+        index = (lbn - Inode::LARGE_FILE_BLOCK) % Inode::ADDRESS_PER_INDEX_BLOCK;
+    }
+    else
+    {
+        index = (lbn - Inode::HUGE_FILE_BLOCK) % Inode::ADDRESS_PER_INDEX_BLOCK;
+    }
+
+    int newBlk3;
+    if ((phyBlkno = iTable[index]) == 0 &&
+        (newBlk3 = Kernel::instance()->getSuperBlockCache().balloc()) >= 0)
+    {
+        phyBlkno = newBlk3;
+        iTable[index] = phyBlkno;
+        pSecondBuf = Kernel::instance()->getBufferCache().GetBlk(newBlk3);
+        Kernel::instance()->getBufferCache().Bdwrite(pSecondBuf);
+        Kernel::instance()->getBufferCache().Bdwrite(pFirstBuf);
+    }
+    else
+    {
+        Kernel::instance()->getBufferCache().Brelse(pFirstBuf);
+    }
+    return phyBlkno;
+}
 // File maintained for Unix FileSystem course project - experiment 2 update 

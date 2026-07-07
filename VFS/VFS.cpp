@@ -307,7 +307,7 @@ InodeId VFS::deleteDirect(const char *fileName)
     Inode *p_dirInode = inodeCache->getInodeByID(p_ext2->locateDir(path));
 
     //Step1 释放盘块 — 直接读 i_addr[]，不调 Bmap()（Bmap 会为 0 的项自动分配新块！）
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 15; i++)
     {
         if (p_delete_inode->i_addr[i] > 0)
         {
@@ -664,7 +664,7 @@ int VFS::read(int fd, u_int8_t *content, int length)
         BlkNum logicBlkno = p_file->f_offset / DISK_BLOCK_SIZE; //逻辑盘块号
         // 对于读操作，直接取 i_addr，不调 Bmap()（Bmap 会为 0 的项自动分配新块）
         BlkNum phyBlkno = 0;
-        if (logicBlkno < 6) {
+        if (logicBlkno < Inode::SMALL_FILE_BLOCK) {
             phyBlkno = p_inode->i_addr[logicBlkno];
         } else {
             // 大型/巨型文件通过 Bmap 读（这些文件肯定有数据块，不会误分配）

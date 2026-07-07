@@ -13,14 +13,14 @@ class DiskInode
 // 一个diskInode的大小为64B
 public:
   DiskInode();
-  DiskInode(unsigned int d_mode,int d_nlink,short d_uid,short d_gid,int d_size,int i_addr[10],int d_atime,int d_mtime,int d_ctime);
+  DiskInode(unsigned int d_mode,int d_nlink,short d_uid,short d_gid,int d_size,int i_addr[15],int d_atime,int d_mtime,int d_ctime);
   DiskInode(Inode inode); //转换构造函数
   unsigned int d_mode;
   int d_nlink;
   short d_uid;
   short d_gid;
   int d_size;
-  int d_addr[10];         //混合索引表
+  int d_addr[15];         //混合索引表: [0..11]=12直接, [12]=单间接, [13]=双间接, [14]=三间接
   int d_atime;
   int d_mtime;
   int d_ctime;            //创建/变更时间

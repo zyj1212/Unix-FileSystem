@@ -13,7 +13,7 @@ class InodePool{
   //TODO
   private:
     Bitmap inodePoolBitmap;
-    char padding[2080];  //NOTE 手工计算: 3*4096 - 2048(bitmap) - 120*68(inode) = 2080
+    char padding[2056];  //NOTE 手工计算: 3*4096 - 2048(bitmap) - 93*88(inode) = 2056
     DiskInode inodeBlock[MAX_INODE_NUM];  //INODE数组存放区域  Inode的大小为64字节
     
 

@@ -32,7 +32,7 @@ public:
   short i_uid;
   short i_gid;
   int i_size;     //文件大小
-  int i_addr[10]; //混合索引表
+  int i_addr[15]; //混合索引表: [0..11]=12直接, [12]=单间接, [13]=双间接, [14]=三间接
 
   unsigned int i_flag; //状态的标志位，定义见enum INodeFlag
   int i_count;         //引用计数
@@ -44,9 +44,14 @@ public:
   //DiskBlock *d_addr[10];  这样有点不地道，因为真实的磁盘必须要根据块号寻址
   static const unsigned int IALLOC = 0x8000; /* 文件被使用 */
   static const int ADDRESS_PER_INDEX_BLOCK = DISK_BLOCK_SIZE / sizeof(int);
-  static const int SMALL_FILE_BLOCK = 6;                                                                                      /* 小型文件：直接索引表最多可寻址的逻辑块号 */
-  static const int LARGE_FILE_BLOCK = ADDRESS_PER_INDEX_BLOCK * 2 + 6;                                                        /* 大型文件：经一次间接索引表最多可寻址的逻辑块号 */
-  static const int HUGE_FILE_BLOCK = ADDRESS_PER_INDEX_BLOCK * ADDRESS_PER_INDEX_BLOCK * 2 + ADDRESS_PER_INDEX_BLOCK * 2 + 6; /* 巨型文件：经二次间接索引最大可寻址文件逻辑块号 */
+  static const int DIRECT_PTR_COUNT = 12;        // 直接指针数量
+  static const int SINGLE_INDIRECT_IDX = 12;      // 单间接索引在 i_addr 中的位置
+  static const int DOUBLE_INDIRECT_IDX = 13;      // 双间接索引在 i_addr 中的位置
+  static const int TRIPLE_INDIRECT_IDX = 14;      // 三间接索引在 i_addr 中的位置
+  static const int SMALL_FILE_BLOCK = 12;         // 12 个直接块
+  static const int LARGE_FILE_BLOCK = 12 + ADDRESS_PER_INDEX_BLOCK;  // +1 单间接 (1024)
+  static const int HUGE_FILE_BLOCK = 12 + ADDRESS_PER_INDEX_BLOCK + ADDRESS_PER_INDEX_BLOCK * ADDRESS_PER_INDEX_BLOCK;  // +1 双间接
+  static const int MAX_FILE_BLOCK = 12 + ADDRESS_PER_INDEX_BLOCK + ADDRESS_PER_INDEX_BLOCK * ADDRESS_PER_INDEX_BLOCK + ADDRESS_PER_INDEX_BLOCK * ADDRESS_PER_INDEX_BLOCK * ADDRESS_PER_INDEX_BLOCK;  // +1 三间接
   static const unsigned int IFMT = 0xF000;                                                                                    /*文件类型掩码（标准 Unix 4-bit）*/
   static const unsigned int IFDIR = 0x4000;                                                                                   //文件类型：目录文件
   static const unsigned int IFCHR = 0x2000;                                                                                   //文件类型：字符设备

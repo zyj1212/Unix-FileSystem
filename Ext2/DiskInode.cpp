@@ -17,7 +17,7 @@ DiskInode::DiskInode()
 	this->d_uid = -1;
 	this->d_gid = -1;
 	this->d_size = 0;
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 15; i++)
 	{
 		this->d_addr[i] = 0;
 	}
@@ -25,7 +25,7 @@ DiskInode::DiskInode()
 	this->d_mtime = 0;
 	this->d_ctime = 0;
 }
-DiskInode::DiskInode(unsigned int d_mode, int d_nlink, short d_uid, short d_gid, int d_size, int d_addr[10], int d_atime, int d_mtime, int d_ctime)
+DiskInode::DiskInode(unsigned int d_mode, int d_nlink, short d_uid, short d_gid, int d_size, int d_addr[15], int d_atime, int d_mtime, int d_ctime)
 {
 	this->d_mode = d_mode;
 	this->d_nlink = d_nlink;  // 修复：原为 d_atime = d_nlink

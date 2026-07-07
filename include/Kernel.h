@@ -7,6 +7,7 @@
 #include "BufferCache.h"
 #include "DirectoryCache.h"
 #include "SuperBlockCache.h"
+#include "BlockGroupDescCache.h"
 #include "File.h"
 #include "OpenFileTable.h"
 
@@ -18,6 +19,7 @@ private:
   InodeCache inodeCache;
   DirectoryCache directoryCache;
   SuperBlockCache superBlockCache;
+  BlockGroupDescCache blockGroupDescCache;
   BufferCache bufferCache;
   DiskDriver diskDriver;
   Ext2 ext2;
@@ -31,6 +33,7 @@ public:
   DiskDriver &getDiskDriver();
   BufferCache &getBufferCache();
   SuperBlockCache &getSuperBlockCache();
+  BlockGroupDescCache &getBlockGroupDescCache();
   InodeCache &getInodeCache();
 };
 

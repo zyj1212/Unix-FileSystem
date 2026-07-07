@@ -1,6 +1,7 @@
 #include "../include/SuperBlockCache.h"
 #include "../include/SuperBlock.h"
 #include "../include/Kernel.h"
+#include "../include/BlockGroupDescCache.h"
 
 SuperBlockCache::SuperBlockCache() : disk_block_bitmap(DISK_SIZE / DISK_BLOCK_SIZE)
 {
@@ -17,6 +18,9 @@ BlkNum SuperBlockCache::balloc()
     {
         disk_block_bitmap.setBit(ret);
         free_block_bum--;
+        // 同步 GDT 空闲块计数
+        Kernel::instance()->getBlockGroupDescCache().desc.bg_free_blocks_count--;
+        Kernel::instance()->getBlockGroupDescCache().dirty = true;
     }
 
     return ret;
@@ -30,6 +34,9 @@ void SuperBlockCache::bfree(BlkNum blknum)
     dirty = true;
     free_block_bum++;
     disk_block_bitmap.unsetBit(blknum);
+    // 同步 GDT 空闲块计数
+    Kernel::instance()->getBlockGroupDescCache().desc.bg_free_blocks_count++;
+    Kernel::instance()->getBlockGroupDescCache().dirty = true;
 }
 void SuperBlockCache::bsetOccupy(BlkNum blkNum)
 {
@@ -70,7 +77,11 @@ InodeId SuperBlockCache::ialloc()
     dirty = true;
     if (free_inode_num != 0)
     {
-        return s_inode[--free_inode_num];
+        InodeId ret = s_inode[--free_inode_num];
+        // 同步 GDT 空闲 inode 计数
+        Kernel::instance()->getBlockGroupDescCache().desc.bg_free_inodes_count--;
+        Kernel::instance()->getBlockGroupDescCache().dirty = true;
+        return ret;
     }
     else
     {
@@ -80,7 +91,9 @@ InodeId SuperBlockCache::ialloc()
 void SuperBlockCache::ifree(InodeId inodeId)
 {
     dirty = true;
-
     s_inode[free_inode_num++] = inodeId;
+    // 同步 GDT 空闲 inode 计数
+    Kernel::instance()->getBlockGroupDescCache().desc.bg_free_inodes_count++;
+    Kernel::instance()->getBlockGroupDescCache().dirty = true;
 }
 // File maintained for Unix FileSystem course project - experiment 2 update 

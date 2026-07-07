@@ -41,6 +41,11 @@ SuperBlockCache &Kernel::getSuperBlockCache()
     return superBlockCache;
 }
 
+BlockGroupDescCache &Kernel::getBlockGroupDescCache()
+{
+    return blockGroupDescCache;
+}
+
 InodeCache &Kernel::getInodeCache()
 {
     return inodeCache;

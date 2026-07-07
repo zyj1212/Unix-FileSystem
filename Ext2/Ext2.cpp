@@ -2,6 +2,8 @@
 #include "../include/Kernel.h"
 #include "../include/VirtualProcess.h"
 #include "../include/TimeHelper.h"
+#include "../include/BlockGroupDesc.h"
+#include "../include/BlockGroupDescCache.h"
 
 /**
  * 这个函数貌似是最格格不入的。
@@ -11,8 +13,9 @@ void Ext2::format()
 {
     p_bufferCache->initialize();
     //0# superblock
-    //1,2,3# inodePool
-    // 4~DISK_BLOCK_NUM-1# 放数据
+    //1# GDT (组描述符表)
+    //2,3,4# inodePool
+    // 5~DISK_BLOCK_NUM-1# 放数据
     DiskBlock *diskMemAddr = Kernel::instance()->getDiskDriver().getDiskMemAddr();
     memset(diskMemAddr, 0, DISK_SIZE);
 
@@ -23,14 +26,15 @@ void Ext2::format()
     // tempSuperBlock.total_inode_num = MAX_INODE_NUM;
     // tempSuperBlock.free_inode_num = MAX_INODE_NUM;
     tempSuperBlock.bsetOccupy(0); //0#盘块被superblock占据
-    tempSuperBlock.bsetOccupy(1);
+    tempSuperBlock.bsetOccupy(1); //1#盘块被GDT占据
     tempSuperBlock.bsetOccupy(2);
-    tempSuperBlock.bsetOccupy(3); //1~3#盘块被inodePool占据(即磁盘Inode区)
-    tempSuperBlock.bsetOccupy(4); //4#盘块放根目录文件
-    tempSuperBlock.bsetOccupy(5); //5#盘块放bin目录文件
-    tempSuperBlock.bsetOccupy(6); //6#盘块放etc目录文件
-    tempSuperBlock.bsetOccupy(7); //7#盘块放home目录文件
-    tempSuperBlock.bsetOccupy(8); //8#盘块放dev目录文件
+    tempSuperBlock.bsetOccupy(3);
+    tempSuperBlock.bsetOccupy(4); //2~4#盘块被inodePool占据(即磁盘Inode区)
+    tempSuperBlock.bsetOccupy(5); //5#盘块放根目录文件
+    tempSuperBlock.bsetOccupy(6); //6#盘块放bin目录文件
+    tempSuperBlock.bsetOccupy(7); //7#盘块放etc目录文件
+    tempSuperBlock.bsetOccupy(8); //8#盘块放home目录文件
+    tempSuperBlock.bsetOccupy(9); //9#盘块放dev目录文件
     //tempSuperBlock.free_block_bum -= 9;
     tempSuperBlock.free_inode_num -= 5;
 
@@ -38,6 +42,23 @@ void Ext2::format()
     *p_superBlock = tempSuperBlock; //没有动态申请，不用管深浅拷贝
     p_superBlock++;
     diskMemAddr = (DiskBlock *)p_superBlock;
+
+    // ①-2 写入 GDT 到 block 1
+    BlockGroupDesc tempGDT;
+    memset(&tempGDT, 0, sizeof(BlockGroupDesc));
+    tempGDT.bg_block_bitmap = 0;                                         // 块位图在 SuperBlock 内 (block 0)
+    tempGDT.bg_inode_bitmap = 2;                                         // Inode 位图在 InodePool 内 (block 2)
+    tempGDT.bg_inode_table = 3;                                          // Inode 表从 block 3 开始
+    tempGDT.bg_free_blocks_count = DISK_BLOCK_NUM - 10;                  // 已占用 10 块
+    tempGDT.bg_free_inodes_count = (MAX_INODE_NUM - 1) - 5;              // 已用 5 个 inode (根+4目录)
+    tempGDT.bg_used_dirs_count = 5;                                      // 5 个目录
+    BlockGroupDesc *p_gdt = (BlockGroupDesc *)diskMemAddr;
+    *p_gdt = tempGDT;
+    p_gdt++;
+    diskMemAddr = (DiskBlock *)p_gdt;
+    // 送一份到 VFS 的 GDT 缓存
+    Kernel::instance()->getBlockGroupDescCache().desc = tempGDT;
+    Kernel::instance()->getBlockGroupDescCache().dirty = false;
     //还要送一份到VFS中
     Kernel::instance()->getSuperBlockCache().dirty = false;
     Kernel::instance()->getSuperBlockCache().SuperBlockBlockNum = tempSuperBlock.SuperBlockBlockNum;
@@ -51,23 +72,23 @@ void Ext2::format()
 
     //②构造DiskInode,修改InodePool,将InodePool写入磁盘img
     InodePool tempInodePool;
-    int tempAddr[10] = {4, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    int tempAddr[15] = {5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     DiskInode tempDiskInode = DiskInode(Inode::IFDIR, 1, 0, 0, 6 * sizeof(DirectoryEntry), tempAddr, TimeHelper::getCurTime(), TimeHelper::getCurTime(), TimeHelper::getCurTime());
     tempInodePool.iupdate(1, tempDiskInode);
     //1#inode，是根目录
-    tempDiskInode.d_addr[0] = 5;
+    tempDiskInode.d_addr[0] = 6;
     tempDiskInode.d_size = sizeof(DirectoryEntry) * 2;
     tempInodePool.iupdate(2, tempDiskInode);
     //2#inode，是bin
-    tempDiskInode.d_addr[0] = 6;
+    tempDiskInode.d_addr[0] = 7;
     tempDiskInode.d_size = sizeof(DirectoryEntry) * 2;
     tempInodePool.iupdate(3, tempDiskInode);
     //3#inode，是etc
-    tempDiskInode.d_addr[0] = 7;
+    tempDiskInode.d_addr[0] = 8;
     tempDiskInode.d_size = sizeof(DirectoryEntry) * 2;
     tempInodePool.iupdate(4, tempDiskInode);
     //4#inode，是home
-    tempDiskInode.d_addr[0] = 8;
+    tempDiskInode.d_addr[0] = 9;
     tempDiskInode.d_size = sizeof(DirectoryEntry) * 2;
     tempInodePool.iupdate(5, tempDiskInode);
     //5#inode，是dev
@@ -180,8 +201,9 @@ int Ext2::registerFs()
         kernelSBC.total_inode_num = tempSuperBlock.total_inode_num;
         kernelSBC.SuperBlockBlockNum = tempSuperBlock.SuperBlockBlockNum;
         memcpy(kernelSBC.s_inode, tempSuperBlock.s_inode, sizeof(tempSuperBlock.s_inode));
-        // tempptr++;
-        // memcpy(tempptr, &tempSuperBlock, DISK_BLOCK_SIZE);
+
+        // 加载 GDT 到 VFS 缓存
+        Kernel::instance()->getBlockGroupDescCache().mount(1);
     }
     else if (mountRes == 1)
     { // 新生成的img，还有待格式化
@@ -222,7 +244,7 @@ int Ext2::allocNewInode()
 void Ext2::updateDiskInode(int inodeID, DiskInode diskInode)
 {
     //要先读后写!
-    int blkno = 2 + inodeID / (DISK_BLOCK_SIZE / DISKINODE_SIZE);
+    int blkno = 3 + inodeID / (DISK_BLOCK_SIZE / DISKINODE_SIZE);
     Buf *pBuf;
     pBuf = p_bufferCache->Bread(blkno);
     DiskInode *p_diskInode = (DiskInode *)pBuf->b_addr;
@@ -236,7 +258,7 @@ void Ext2::updateDiskInode(int inodeID, DiskInode diskInode)
 DiskInode Ext2::getDiskInodeByNum(int inodeID)
 {
     //inode分布在两个盘块上，首先根据inodeID计算在哪个盘块上
-    int blkno = 2 + inodeID / (DISK_BLOCK_SIZE / DISKINODE_SIZE);
+    int blkno = 3 + inodeID / (DISK_BLOCK_SIZE / DISKINODE_SIZE);
     Buf *pBuf;
     pBuf = p_bufferCache->Bread(blkno);
     DiskInode *p_diskInode = (DiskInode *)pBuf->b_addr;
