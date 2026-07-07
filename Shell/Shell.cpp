@@ -671,16 +671,21 @@ void Shell::useradd()
     bounded_VFS->close(fd);
     fileContent[totalRead] = '\0';
 
-    // Step2: 检查用户名是否已存在
+    // Step2: 检查用户名是否已存在，同时记录最大 uid
     char contentCopy[4096];
     strcpy(contentCopy, fileContent);
+    int maxUid = 1000;  // 起始 uid，新用户从 1001 开始
     char *line = strtok(contentCopy, "\n");
     while (line != NULL) {
         char existingUser[32];
-        if (sscanf(line, "%[^:]", existingUser) == 1) {
+        int existingUid;
+        if (sscanf(line, "%[^:]:%*[^:]:%d", existingUser, &existingUid) == 2) {
             if (strcmp(existingUser, newUser) == 0) {
                 Logcat::log("错误：用户名已存在！");
                 return;
+            }
+            if (existingUid > maxUid) {
+                maxUid = existingUid;
             }
         }
         line = strtok(NULL, "\n");
@@ -688,8 +693,7 @@ void Shell::useradd()
 
     // Step3: 追加新用户行
     char newLine[128];
-    // uid 从 1001 开始分配
-    snprintf(newLine, sizeof(newLine), "%s:%s:1001:100\n", newUser, newPass);
+    snprintf(newLine, sizeof(newLine), "%s:%s:%d:100\n", newUser, newPass, maxUid + 1);
 
     // Step4: 覆盖写回
     fd = bounded_VFS->open(passwdPath, File::FWRITE);
@@ -766,6 +770,17 @@ void Shell::chmod()
 
     Inode *p_inode = Kernel::instance()->getInodeCache().getInodeByID(targetInodeId);
 
+    // 权限检查：仅文件所有者或 root 可以修改权限
+    User &u = VirtualProcess::Instance()->getUser();
+    if (!u.isLoggedIn) {
+        Logcat::log("错误：请先登录！");
+        return;
+    }
+    if (u.u_uid != 0 && p_inode->i_uid != u.u_uid) {
+        Logcat::log("错误：只有文件所有者或 root 才能修改权限！");
+        return;
+    }
+
     // 保存文件类型标志
     unsigned int fileType = p_inode->i_mode & Inode::IFMT;
 
@@ -788,7 +803,7 @@ void Shell::chown()
 
     // 只有 root 可以修改文件所有者
     User &currentUser = VirtualProcess::Instance()->getUser();
-    if (currentUser.u_uid != 0) {
+    if (!currentUser.isLoggedIn || currentUser.u_uid != 0) {
         Logcat::log("错误：只有 root 用户才能修改文件所有者！");
         return;
     }
@@ -882,8 +897,8 @@ void Shell::logout()
 
     memset(u.username, 0, sizeof(u.username));
     memset(u.password, 0, sizeof(u.password));
-    u.u_uid = 0;
-    u.u_gid = 0;
+    u.u_uid = -1;  // 恢复 guest 状态（非 root）
+    u.u_gid = -1;
     u.isLoggedIn = false;
 
     Logcat::log("已退出登录");

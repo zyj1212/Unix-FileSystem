@@ -39,6 +39,7 @@ public:
   short i_dev;
   int i_number; //文件的inode号
   int i_lastr;  //存放最近一次读取文件的逻辑块号，用于判断是否需要预读
+  int i_ctime;  //创建/变更时间（ctime）
 
   //DiskBlock *d_addr[10];  这样有点不地道，因为真实的磁盘必须要根据块号寻址
   static const unsigned int IALLOC = 0x8000; /* 文件被使用 */
@@ -46,7 +47,7 @@ public:
   static const int SMALL_FILE_BLOCK = 6;                                                                                      /* 小型文件：直接索引表最多可寻址的逻辑块号 */
   static const int LARGE_FILE_BLOCK = ADDRESS_PER_INDEX_BLOCK * 2 + 6;                                                        /* 大型文件：经一次间接索引表最多可寻址的逻辑块号 */
   static const int HUGE_FILE_BLOCK = ADDRESS_PER_INDEX_BLOCK * ADDRESS_PER_INDEX_BLOCK * 2 + ADDRESS_PER_INDEX_BLOCK * 2 + 6; /* 巨型文件：经二次间接索引最大可寻址文件逻辑块号 */
-  static const unsigned int IFMT = 0x6000;                                                                                    /*文件类型掩码*/
+  static const unsigned int IFMT = 0xF000;                                                                                    /*文件类型掩码（标准 Unix 4-bit）*/
   static const unsigned int IFDIR = 0x4000;                                                                                   //文件类型：目录文件
   static const unsigned int IFCHR = 0x2000;                                                                                   //文件类型：字符设备
   static const unsigned int IFBLK = 0x6000;                                                                                   //块设备特殊类型文件，为0表示常规数据文件

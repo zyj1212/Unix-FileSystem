@@ -1,1 +1,0 @@
-# Assets for README documentation  

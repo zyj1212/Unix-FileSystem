@@ -25,6 +25,7 @@ Inode::Inode(DiskInode d_inode)
     this->i_dev = 0;
     //this->i_number = ? ;s  注意！DISKINODE是没有INODE号这个属性的，一个DISKINODE的号是固定的，可以根据其位置算出来
     this->i_lastr = -1;
+    this->i_ctime = d_inode.d_ctime;
 }
 
 /**

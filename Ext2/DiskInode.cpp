@@ -5,7 +5,7 @@
  */
 DiskInode::DiskInode()
 {
-	/* 
+	/*
 	 * 如果DiskInode没有构造函数，会发生如下较难察觉的错误：
 	 * DiskInode作为局部变量占据函数Stack Frame中的内存空间，但是
 	 * 这段空间没有被正确初始化，仍旧保留着先前栈内容，由于并不是
@@ -23,17 +23,19 @@ DiskInode::DiskInode()
 	}
 	this->d_atime = 0;
 	this->d_mtime = 0;
+	this->d_ctime = 0;
 }
-DiskInode::DiskInode(unsigned int d_mode, int d_nlink, short d_uid, short d_gid, int d_size, int d_addr[10], int d_atime, int d_mtime)
+DiskInode::DiskInode(unsigned int d_mode, int d_nlink, short d_uid, short d_gid, int d_size, int d_addr[10], int d_atime, int d_mtime, int d_ctime)
 {
 	this->d_mode = d_mode;
-	this->d_atime = d_nlink;
+	this->d_nlink = d_nlink;  // 修复：原为 d_atime = d_nlink
 	this->d_uid = d_uid;
 	this->d_gid = d_gid;
 	this->d_size = d_size;
 	memcpy(this->d_addr, d_addr, MIXED_ADDR_TABLE_SIZE);
 	this->d_atime = d_atime;
 	this->d_mtime = d_mtime;
+	this->d_ctime = d_ctime;
 }
 
 /**
@@ -48,5 +50,6 @@ DiskInode::DiskInode(Inode inode)
 	d_gid = inode.i_gid;
 	d_size = inode.i_size;
 	memcpy(d_addr, inode.i_addr, MIXED_ADDR_TABLE_SIZE);
+	d_ctime = inode.i_ctime;
 
 } //转换构造函数// File maintained for Unix FileSystem course project - experiment 2 update 

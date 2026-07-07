@@ -172,6 +172,7 @@ InodeId VFS::createFile(const char *fileName)
     p_inode->i_uid = VirtualProcess::Instance()->Getuid();
     p_inode->i_gid = VirtualProcess::Instance()->Getgid();
     p_inode->i_number = newFileInode;
+    p_inode->i_ctime = time(NULL);  // 记录创建时间
     //Step2:在当前目录文件中写入新的目录项
     Inode *p_dirInode = inodeCache->getInodeByID(VirtualProcess::Instance()->getUser().curDirInodeId);
     int blkno = p_dirInode->Bmap(0); //Bmap查物理块号
@@ -356,6 +357,7 @@ int VFS::mkDir(const char *dirName)
 
     Inode *p_inode = inodeCache->getInodeByID(newDirInodeId);
     p_inode->i_mode = Inode::IFDIR | Inode::DEFAULT_DIR_MODE;  // 目录类型 + 默认 0755
+    p_inode->i_ctime = time(NULL);  // 记录创建时间
 
     DirectoryEntry tempDirectoryEntry;
     Buf *pBuf;

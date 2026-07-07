@@ -52,7 +52,7 @@ void Ext2::format()
     //②构造DiskInode,修改InodePool,将InodePool写入磁盘img
     InodePool tempInodePool;
     int tempAddr[10] = {4, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    DiskInode tempDiskInode = DiskInode(Inode::IFDIR, 1, VirtualProcess::Instance()->Getuid(), VirtualProcess::Instance()->Getgid(), 6 * sizeof(DirectoryEntry), tempAddr, TimeHelper::getCurTime(), TimeHelper::getCurTime());
+    DiskInode tempDiskInode = DiskInode(Inode::IFDIR, 1, 0, 0, 6 * sizeof(DirectoryEntry), tempAddr, TimeHelper::getCurTime(), TimeHelper::getCurTime(), TimeHelper::getCurTime());
     tempInodePool.iupdate(1, tempDiskInode);
     //1#inode，是根目录
     tempDiskInode.d_addr[0] = 5;
