@@ -73,9 +73,12 @@ enum INSTRUCT
     USERADD,
     WHOAMI,
     CHMOD,
-    CHOWN
+    CHOWN,
+    DIR,
+    HISTORY,
+    LOGOUT
 };
-const int INST_NUM = 21;
+const int INST_NUM = 24;
 //NOTE 注意，如果改了上面的枚举类型，那么下面的这个数字也需要相应修改
 
 static const char *instructStr[]{
@@ -99,7 +102,10 @@ static const char *instructStr[]{
     "useradd",
     "whoami",
     "chmod",
-    "chown"};
+    "chown",
+    "dir",
+    "history",
+    "logout"};
 enum FileType
 {
     NORMAL_FILE,

@@ -205,6 +205,9 @@ void Shell::parseCmd()
     case HISTORY:
         history();
         break;
+    case LOGOUT:
+        logout();
+        break;
     default:
         Logcat::log("CMD NOT SUPPORTED!\n");
         break;
@@ -325,7 +328,30 @@ void Shell::mkdir()
 void Shell::cat()
 {
     Logcat::devlog(TAG, "cat EXEC");
-    Logcat::log("cat 暂不支持");
+    if (getParamAmount() != 2) {
+        Logcat::log("用法: cat 文件名");
+        return;
+    }
+
+    const char *fileName = getParam(1);
+    Path path(fileName);
+    FileFd fd = bounded_VFS->open(path, File::FREAD);
+    if (fd < 0) {
+        Logcat::log("文件打开失败！");
+        return;
+    }
+
+    char buf[4096];
+    int totalRead = 0;
+    while (!bounded_VFS->eof(fd)) {
+        int readSize = bounded_VFS->read(fd, (u_int8_t*)buf + totalRead, sizeof(buf) - totalRead - 1);
+        if (readSize <= 0) break;
+        totalRead += readSize;
+    }
+    buf[totalRead] = '\0';
+    printf("%s", buf);
+
+    bounded_VFS->close(fd);
 }
 void Shell::touch()
 {
@@ -841,6 +867,23 @@ void Shell::history()
     {
         printf("%3d  %s\n", i + 1, history_buf[i]);
     }
+}
+
+void Shell::logout()
+{
+    User &u = VirtualProcess::Instance()->getUser();
+    if (!u.isLoggedIn) {
+        Logcat::log("当前未登录");
+        return;
+    }
+
+    memset(u.username, 0, sizeof(u.username));
+    memset(u.password, 0, sizeof(u.password));
+    u.u_uid = 0;
+    u.u_gid = 0;
+    u.isLoggedIn = false;
+
+    Logcat::log("已退出登录");
 }
 
 Shell::Shell()

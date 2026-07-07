@@ -9,6 +9,7 @@
 #define MAX_CMD_LEN 4096
 #define MAX_PARAM_NUM 32
 #define MAX_SINGLE_PARAM_LEN 128
+#define HISTORY_MAX 100
 
 class Shell
 {
@@ -16,6 +17,8 @@ class Shell
 private:
   char tty_buffer[TTY_BUFFER_SIZE];
   char split_cmd[MAX_PARAM_NUM][MAX_SINGLE_PARAM_LEN]{};
+  char history_buf[HISTORY_MAX][MAX_CMD_LEN];
+  int history_count = 0;
   int param_num = 0;
   char const *TAG;
   VFS *bounded_VFS;
@@ -55,6 +58,9 @@ public:
   void whoami();
   void chmod();
   void chown();
+  void dir();
+  void history();
+  void logout();
   //隐式调用
   //void creat();
   //void open();

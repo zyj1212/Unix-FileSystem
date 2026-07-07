@@ -307,7 +307,7 @@ InodeId VFS::deleteDirect(const char *fileName)
 
     BlkNum phyno;
     //Step1 释放盘块
-    for (int lbn = 0; (phyno = p_delete_inode->Bmap(lbn)) <= 0; lbn++)
+    for (int lbn = 0; (phyno = p_delete_inode->Bmap(lbn)) > 0; lbn++)
     {
         superBlockCache->bfree(phyno);
     }
@@ -397,7 +397,7 @@ void VFS::ls(InodeId dirInodeID)
     //首先要获得这个inode->访问这个目录文件
     //step1: 检查inodeCache中有没有，有则直接用，没有则向Ext2模块要
     Inode &inode = *inodeCache->getInodeByID(dirInodeID);
-    if (inode.i_mode & Inode::IFMT != Inode::IFDIR)
+    if ((inode.i_mode & Inode::IFMT) != Inode::IFDIR)
     {
         printf("ERROR! ls的参数只能为空或者目录名！\n");
         return;
@@ -492,16 +492,16 @@ void VFS::dir(InodeId dirInodeID)
             else
                 modeStr[0] = '-';
 
-            // 权限位
-            modeStr[1] = 'r';
-            modeStr[2] = 'w';
-            modeStr[3] = 'x';
-            modeStr[4] = 'r';
-            modeStr[5] = 'w';
-            modeStr[6] = 'x';
-            modeStr[7] = 'r';
-            modeStr[8] = 'w';
-            modeStr[9] = 'x';
+            // 权限位 - 从 i_mode 实际读取
+            modeStr[1] = (p_fileInode->i_mode & Inode::S_IRUSR) ? 'r' : '-';
+            modeStr[2] = (p_fileInode->i_mode & Inode::S_IWUSR) ? 'w' : '-';
+            modeStr[3] = (p_fileInode->i_mode & Inode::S_IXUSR) ? 'x' : '-';
+            modeStr[4] = (p_fileInode->i_mode & Inode::S_IRGRP) ? 'r' : '-';
+            modeStr[5] = (p_fileInode->i_mode & Inode::S_IWGRP) ? 'w' : '-';
+            modeStr[6] = (p_fileInode->i_mode & Inode::S_IXGRP) ? 'x' : '-';
+            modeStr[7] = (p_fileInode->i_mode & Inode::S_IROTH) ? 'r' : '-';
+            modeStr[8] = (p_fileInode->i_mode & Inode::S_IWOTH) ? 'w' : '-';
+            modeStr[9] = (p_fileInode->i_mode & Inode::S_IXOTH) ? 'x' : '-';
             modeStr[10] = '\0';
 
             printf("%-10s  ", modeStr);
@@ -539,7 +539,7 @@ FileFd VFS::open(Path path, int mode)
     InodeId openFileInodeId = p_ext2->locateInode(path);
     //Step2. 检查打开合法性(省略了文件本身读写的限定)
     Inode *p_inodeOpenFile = inodeCache->getInodeByID(openFileInodeId);
-    if (p_inodeOpenFile->i_mode & Inode::IFMT != 0)
+    if ((p_inodeOpenFile->i_mode & Inode::IFMT) != 0)
     {
         return ERROR_OPEN_ILLEGAL; //在本程序中，只有普通文件可以open
     }
