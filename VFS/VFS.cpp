@@ -476,8 +476,8 @@ void VFS::dir(InodeId dirInodeID)
             // 文件名
             printf("%-28s  ", p_directoryEntry->m_name);
 
-            // 物理地址：第一个数据块的物理块号
-            int firstBlk = p_fileInode->Bmap(0);
+            // 物理地址：第一个数据块的物理块号（直接读 i_addr，避免 Bmap 误分配）
+            int firstBlk = p_fileInode->i_addr[0];
             if (firstBlk <= 0)
                 printf("%-10s  ", "-");
             else
@@ -540,6 +540,10 @@ FileFd VFS::open(Path path, int mode)
     FileFd fd;
     //Step1. 查找该文件的inode号
     InodeId openFileInodeId = p_ext2->locateInode(path);
+    if (openFileInodeId < 0) {
+        Logcat::log("文件不存在！");
+        return ERROR_PATH_NFOUND;
+    }
     //Step2. 检查打开合法性(省略了文件本身读写的限定)
     Inode *p_inodeOpenFile = inodeCache->getInodeByID(openFileInodeId);
     if ((p_inodeOpenFile->i_mode & Inode::IFMT) != 0)
@@ -640,15 +644,33 @@ int VFS::read(int fd, u_int8_t *content, int length)
     p_inode->i_flag |= Inode::IUPD;
     Buf *pBuf;
 
+    if (p_file->f_offset > p_inode->i_size)
+    {
+        return 0; // 已超过文件末尾
+    }
     if (length > p_inode->i_size - p_file->f_offset + 1)
     {
         length = p_inode->i_size - p_file->f_offset + 1;
     }
+    if (length <= 0)
+    {
+        return 0; // 空文件，没有可读内容
+    }
 
-    while (readByteCount < length && p_file->f_offset <= p_inode->i_size) //NOTE 这里是<还是<=再考虑一下
+    while (readByteCount < length && p_file->f_offset <= p_inode->i_size)
     {
         BlkNum logicBlkno = p_file->f_offset / DISK_BLOCK_SIZE; //逻辑盘块号
-        BlkNum phyBlkno = p_inode->Bmap(logicBlkno);            //物理盘块号
+        // 对于读操作，直接取 i_addr，不调 Bmap()（Bmap 会为 0 的项自动分配新块）
+        BlkNum phyBlkno = 0;
+        if (logicBlkno < 6) {
+            phyBlkno = p_inode->i_addr[logicBlkno];
+        } else {
+            // 大型/巨型文件通过 Bmap 读（这些文件肯定有数据块，不会误分配）
+            phyBlkno = p_inode->Bmap(logicBlkno);
+        }
+        if (phyBlkno <= 0) {
+            break; // 没有对应的物理块，文件到此为止
+        }
         int offsetInBlock = p_file->f_offset % DISK_BLOCK_SIZE; //块内偏移
         pBuf = Kernel::instance()->getBufferCache().Bread(phyBlkno);
         u_int8_t *p_buf_byte = (u_int8_t *)pBuf->b_addr;
@@ -740,11 +762,11 @@ bool VFS::eof(FileFd fd)
 {
     User &u = VirtualProcess::Instance()->getUser();
     File *p_file = u.u_ofiles.GetF(fd);
-    Inode *p_inode = inodeCache->getInodeByID(p_file->f_inode_id); //TODO错误处理?
-    if (p_file->f_offset == p_inode->i_size + 1)
-        return true;
-    else
-        return false;
+    if (p_file == NULL) return true;
+    Inode *p_inode = inodeCache->getInodeByID(p_file->f_inode_id);
+    if (p_inode == NULL) return true;
+    // 当偏移量 > 文件大小时，到达文件末尾
+    return p_file->f_offset > p_inode->i_size;
 }
 
 void VFS::registerExt2(Ext2 *p_ext2)
