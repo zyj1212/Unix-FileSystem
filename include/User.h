@@ -14,6 +14,7 @@ public:
 	 * 
 	 */
 	User();
+
 	/* 文件系统相关成员 */
 	Inode *u_cdir; /* 指向当前目录的Inode指针 */
 	Inode *u_pdir; /* 指向父目录的Inode指针 */
