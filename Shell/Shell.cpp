@@ -707,7 +707,7 @@ void Shell::chown()
         memset(line, 0, sizeof(line));
         pos = 0;
         while (!bounded_VFS->eof(fd) && pos < (int)sizeof(line) - 1) {
-            bounded_VFS::read(fd, (u_int8_t*)&ch, 1);
+            bounded_VFS->read(fd, (u_int8_t*)&ch, 1);
             if (ch == '\n') break;
             line[pos++] = ch;
         }
