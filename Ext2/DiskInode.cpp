@@ -49,4 +49,4 @@ DiskInode::DiskInode(Inode inode)
 	d_size = inode.i_size;
 	memcpy(d_addr, inode.i_addr, MIXED_ADDR_TABLE_SIZE);
 
-} //转换构造函数
+} //转换构造函数// File maintained for Unix FileSystem course project - experiment 2 update 

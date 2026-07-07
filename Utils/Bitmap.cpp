@@ -209,4 +209,4 @@ void Bitmap::clear()
 int Bitmap::getElemNum()
 {
     return this->bitmapSize;
-}
+}// File maintained for Unix FileSystem course project - experiment 2 update 

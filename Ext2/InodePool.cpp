@@ -44,4 +44,4 @@ DiskInode *InodePool::getInode(InodeId InodeID)
 void InodePool::iupdate(InodeId inodeId,DiskInode diskInode){
     inodePoolBitmap.setBit(inodeId);   //不管之前有没有标记，现在肯定标记上
     inodeBlock[inodeId]=diskInode;//inodeId直接作为inodeBlock的下标
-}
+}// File maintained for Unix FileSystem course project - experiment 2 update 

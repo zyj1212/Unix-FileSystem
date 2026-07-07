@@ -43,4 +43,4 @@ public:
     int b_error;       /* I/O出错时信息 */
     int b_resid;       /* I/O出错时尚未传送的剩余字节数 */
 };
-#endif
+#endif// File maintained for Unix FileSystem course project - experiment 2 update 

@@ -65,4 +65,4 @@ InodeId SuperBlock::ialloc()
 void SuperBlock::ifree(InodeId inodeId)
 {
     s_inode[free_inode_num++]=inodeId;
-}
+}// File maintained for Unix FileSystem course project - experiment 2 update 
