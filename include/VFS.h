@@ -29,6 +29,8 @@ public:
   int cd(const char *dirName);    //返回进入的dir的Inode
   void ls(const char *dirName);
   void ls(InodeId dirInodeID);
+  void dir(const char *dirName);
+  void dir(InodeId dirInodeID);
   int open(Path path, int mode);
   int close(int fd);
   int read(int fd, u_int8_t *content, int length);  //用户层面，文件必须先打开才可读
