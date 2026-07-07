@@ -1,0 +1,6 @@
+services:
+  user_fs:
+    build: .
+    container_name: unix-filesystem
+    stdin_open: true   # -i (interactive)
+    tty: true          # -t (allocate TTY)
