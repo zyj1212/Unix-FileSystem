@@ -14,11 +14,14 @@ int Shell::readUserInput()
     while (true)
     {
         //Step0:
-        //显示命令提示符
+        //显示命令提示符（支持用户登录提示）
 
-        putchar('$');
-        putchar(' ');
-        //TODO
+        User &curU = VirtualProcess::Instance()->getUser();
+        if (curU.isLoggedIn) {
+            printf("%s@user_fs:/$ ", curU.username);
+        } else {
+            printf("guest$ ");
+        }
 
         //Step1:获取用户输入放到缓冲区
 
@@ -111,6 +114,15 @@ void Shell::parseCmd()
         break;
     case WITHDRAW:
         withdraw(); //OKKK
+        break;
+    case LOGIN:
+        login();
+        break;
+    case USERADD:
+        useradd();
+        break;
+    case WHOAMI:
+        whoami();
         break;
     default:
         Logcat::log("CMD NOT SUPPORTED!\n");
@@ -439,6 +451,157 @@ void Shell::withdraw()
     else
     {
         Logcat::log("ERROR!store命令参数个数错误");
+    }
+}
+
+void Shell::login()
+{
+    if (getParamAmount() != 3) {
+        Logcat::log("用法: login 用户名 密码");
+        return;
+    }
+
+    User &u = VirtualProcess::Instance()->getUser();
+
+    // 如果已经登录，提示先退出
+    if (u.isLoggedIn) {
+        Logcat::log("当前已登录，请先退出当前用户");
+        return;
+    }
+
+    const char *inputUser = getParam(1);
+    const char *inputPass = getParam(2);
+
+    // 打开 /etc/passwd 文件（绝对路径）
+    Path passwdPath("/etc/passwd");
+    FileFd fd = bounded_VFS->open(passwdPath, File::FREAD);
+    if (fd < 0) {
+        Logcat::log("用户文件不存在！请先执行 format");
+        return;
+    }
+
+    // 逐行读取用户文件
+    char line[256];
+    bool found = false;
+
+    while (!bounded_VFS->eof(fd)) {
+        memset(line, 0, sizeof(line));
+        char ch;
+        int pos = 0;
+        while (!bounded_VFS->eof(fd) && pos < 255) {
+            bounded_VFS->read(fd, (u_int8_t*)&ch, 1);
+            if (ch == '\n') break;
+            line[pos++] = ch;
+        }
+        line[pos] = '\0';
+
+        if (strlen(line) == 0) continue;
+
+        // 解析：用户名:密码:uid:gid
+        char savedUser[32], savedPass[32];
+        int savedUid, savedGid;
+        if (sscanf(line, "%[^:]:%[^:]:%d:%d",
+                   savedUser, savedPass, &savedUid, &savedGid) == 4) {
+            if (strcmp(savedUser, inputUser) == 0 &&
+                strcmp(savedPass, inputPass) == 0) {
+                found = true;
+                strcpy(u.username, savedUser);
+                strcpy(u.password, savedPass);
+                u.u_uid = (short)savedUid;
+                u.u_gid = (short)savedGid;
+                u.isLoggedIn = true;
+                Logcat::log("登录成功！");
+                break;
+            }
+        }
+    }
+
+    bounded_VFS->close(fd);
+
+    if (!found) {
+        Logcat::log("登录失败：用户名或密码错误！");
+    }
+}
+
+void Shell::useradd()
+{
+    if (getParamAmount() != 3) {
+        Logcat::log("用法: useradd 用户名 密码");
+        return;
+    }
+
+    const char *newUser = getParam(1);
+    const char *newPass = getParam(2);
+
+    User &u = VirtualProcess::Instance()->getUser();
+    if (!u.isLoggedIn || u.u_uid != 0) {
+        Logcat::log("错误：只有 root 用户才能创建新用户！");
+        return;
+    }
+
+    // Step1: 读取 /etc/passwd 全部内容到内存
+    Path passwdPath("/etc/passwd");
+    FileFd fd = bounded_VFS->open(passwdPath, File::FREAD);
+    if (fd < 0) {
+        Logcat::log("用户文件读取失败！请先执行 format 创建用户文件");
+        return;
+    }
+
+    char fileContent[4096];
+    memset(fileContent, 0, sizeof(fileContent));
+    int totalRead = 0;
+    char tempBuf[512];
+    while (!bounded_VFS->eof(fd)) {
+        int readSize = bounded_VFS->read(fd, (u_int8_t*)tempBuf, 512);
+        if (readSize > 0 && totalRead + readSize < 4000) {
+            memcpy(fileContent + totalRead, tempBuf, readSize);
+            totalRead += readSize;
+        }
+    }
+    bounded_VFS->close(fd);
+    fileContent[totalRead] = '\0';
+
+    // Step2: 检查用户名是否已存在
+    char contentCopy[4096];
+    strcpy(contentCopy, fileContent);
+    char *line = strtok(contentCopy, "\n");
+    while (line != NULL) {
+        char existingUser[32];
+        if (sscanf(line, "%[^:]", existingUser) == 1) {
+            if (strcmp(existingUser, newUser) == 0) {
+                Logcat::log("错误：用户名已存在！");
+                return;
+            }
+        }
+        line = strtok(NULL, "\n");
+    }
+
+    // Step3: 追加新用户行
+    char newLine[128];
+    // uid 从 1001 开始分配
+    snprintf(newLine, sizeof(newLine), "%s:%s:1001:100\n", newUser, newPass);
+
+    // Step4: 覆盖写回
+    fd = bounded_VFS->open(passwdPath, File::FWRITE);
+    if (fd < 0) {
+        Logcat::log("用户文件打开失败！");
+        return;
+    }
+
+    bounded_VFS->write(fd, (u_int8_t*)fileContent, strlen(fileContent));
+    bounded_VFS->write(fd, (u_int8_t*)newLine, strlen(newLine));
+    bounded_VFS->close(fd);
+
+    Logcat::log("用户创建成功！");
+}
+
+void Shell::whoami()
+{
+    User &u = VirtualProcess::Instance()->getUser();
+    if (u.isLoggedIn) {
+        printf("当前用户：%s (uid=%d)\n", u.username, u.u_uid);
+    } else {
+        Logcat::log("当前用户：guest（未登录）");
     }
 }
 
