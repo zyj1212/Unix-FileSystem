@@ -124,6 +124,12 @@ void Shell::parseCmd()
     case WHOAMI:
         whoami();
         break;
+    case CHMOD:
+        chmod();
+        break;
+    case CHOWN:
+        chown();
+        break;
     default:
         Logcat::log("CMD NOT SUPPORTED!\n");
         break;
@@ -608,6 +614,136 @@ void Shell::whoami()
 void Shell::clear()
 {
     system("clear");
+}
+
+void Shell::chmod()
+{
+    if (getParamAmount() != 3) {
+        Logcat::log("用法: chmod 权限值 文件名");
+        Logcat::log("示例: chmod 755 test.txt");
+        return;
+    }
+
+    // 解析权限值（八进制字符串转数字）
+    const char *permStr = getParam(1);
+    const char *fileName = getParam(2);
+
+    int permValue = 0;
+    // 手动解析八进制字符串，如 "755" → 0755
+    for (const char *p = permStr; *p != '\0'; p++) {
+        permValue = permValue * 8 + (*p - '0');
+    }
+
+    // 将数字权限转换为 i_mode 中的权限位
+    unsigned int newMode = 0;
+
+    // 所有者权限
+    if (permValue & 0400) newMode |= Inode::S_IRUSR;
+    if (permValue & 0200) newMode |= Inode::S_IWUSR;
+    if (permValue & 0100) newMode |= Inode::S_IXUSR;
+
+    // 组用户权限
+    if (permValue & 0040) newMode |= Inode::S_IRGRP;
+    if (permValue & 0020) newMode |= Inode::S_IWGRP;
+    if (permValue & 0010) newMode |= Inode::S_IXGRP;
+
+    // 其他用户权限
+    if (permValue & 0004) newMode |= Inode::S_IROTH;
+    if (permValue & 0002) newMode |= Inode::S_IWOTH;
+    if (permValue & 0001) newMode |= Inode::S_IXOTH;
+
+    // 查找文件
+    Path path(fileName);
+    InodeId targetInodeId = bounded_VFS->getExt2()->locateInode(path);
+    if (targetInodeId < 0) {
+        Logcat::log("文件不存在！");
+        return;
+    }
+
+    Inode *p_inode = Kernel::instance()->getInodeCache().getInodeByID(targetInodeId);
+
+    // 保存文件类型标志
+    unsigned int fileType = p_inode->i_mode & Inode::IFMT;
+
+    // 设置新的权限
+    p_inode->i_mode = fileType | newMode;
+    p_inode->i_flag |= Inode::IUPD;
+
+    Logcat::log("权限修改成功！");
+}
+
+void Shell::chown()
+{
+    if (getParamAmount() != 3) {
+        Logcat::log("用法: chown 用户名 文件名");
+        return;
+    }
+
+    const char *userName = getParam(1);
+    const char *fileName = getParam(2);
+
+    // 只有 root 可以修改文件所有者
+    User &currentUser = VirtualProcess::Instance()->getUser();
+    if (currentUser.u_uid != 0) {
+        Logcat::log("错误：只有 root 用户才能修改文件所有者！");
+        return;
+    }
+
+    // 查找 /etc/passwd 获取用户的 uid
+    Path passwdPath("/etc/passwd");
+    FileFd fd = bounded_VFS->open(passwdPath, File::FREAD);
+    if (fd < 0) {
+        Logcat::log("用户文件读取失败！");
+        return;
+    }
+
+    short targetUid = -1;
+    short targetGid = -1;
+    char line[256];
+    char ch;
+    int pos = 0;
+
+    while (!bounded_VFS->eof(fd)) {
+        memset(line, 0, sizeof(line));
+        pos = 0;
+        while (!bounded_VFS->eof(fd) && pos < (int)sizeof(line) - 1) {
+            bounded_VFS::read(fd, (u_int8_t*)&ch, 1);
+            if (ch == '\n') break;
+            line[pos++] = ch;
+        }
+        line[pos] = '\0';
+
+        char savedUser[32], savedPass[32];
+        int savedUid, savedGid;
+        if (sscanf(line, "%[^:]:%[^:]:%d:%d", savedUser, savedPass, &savedUid, &savedGid) == 4) {
+            if (strcmp(savedUser, userName) == 0) {
+                targetUid = savedUid;
+                targetGid = savedGid;
+                break;
+            }
+        }
+    }
+    bounded_VFS->close(fd);
+
+    if (targetUid < 0) {
+        Logcat::log("用户不存在！");
+        return;
+    }
+
+    // 查找文件
+    Path path(fileName);
+    InodeId targetInodeId = bounded_VFS->getExt2()->locateInode(path);
+    if (targetInodeId < 0) {
+        Logcat::log("文件不存在！");
+        return;
+    }
+
+    Inode *p_inode = Kernel::instance()->getInodeCache().getInodeByID(targetInodeId);
+    p_inode->i_uid = targetUid;
+    p_inode->i_gid = targetGid;
+    p_inode->i_flag |= Inode::IUPD;
+
+    Logcat::log("文件所有者修改成功！");
 }
 
 Shell::Shell()

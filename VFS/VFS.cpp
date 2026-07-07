@@ -167,7 +167,7 @@ InodeId VFS::createFile(const char *fileName)
     Inode *p_inode = inodeCache->getInodeByID(newFileInode); //并将这个inode写入inodeCache
     p_inode->i_flag = Inode::IUPD | Inode::IACC;
     p_inode->i_size = 0;
-    p_inode->i_mode = 0;
+    p_inode->i_mode = Inode::DEFAULT_FILE_MODE;  // 默认 0644
     p_inode->i_nlink = 1;
     p_inode->i_uid = VirtualProcess::Instance()->Getuid();
     p_inode->i_gid = VirtualProcess::Instance()->Getgid();
@@ -352,7 +352,7 @@ int VFS::mkDir(const char *dirName)
     }
 
     Inode *p_inode = inodeCache->getInodeByID(newDirInodeId);
-    p_inode->i_mode = Inode::IFDIR;
+    p_inode->i_mode = Inode::IFDIR | Inode::DEFAULT_DIR_MODE;  // 目录类型 + 默认 0755
 
     DirectoryEntry tempDirectoryEntry;
     Buf *pBuf;
@@ -461,6 +461,47 @@ FileFd VFS::open(Path path, int mode)
         return ERROR_OPEN_ILLEGAL; //在本程序中，只有普通文件可以open
     }
     p_inodeOpenFile->i_flag |= Inode::IACC;
+
+    // ====== 权限检查 ======
+    User &u = VirtualProcess::Instance()->getUser();
+
+    if (mode & File::FWRITE) {
+        // 检查写权限
+        bool canWrite = false;
+        if (u.u_uid == 0) {
+            canWrite = true;
+        } else if (p_inodeOpenFile->i_uid == u.u_uid) {
+            canWrite = (p_inodeOpenFile->i_mode & Inode::S_IWUSR) != 0;
+        } else if (p_inodeOpenFile->i_gid == u.u_gid) {
+            canWrite = (p_inodeOpenFile->i_mode & Inode::S_IWGRP) != 0;
+        } else {
+            canWrite = (p_inodeOpenFile->i_mode & Inode::S_IWOTH) != 0;
+        }
+        if (!canWrite) {
+            Logcat::log("权限错误：没有写权限！");
+            return ERROR_OPEN_ILLEGAL;
+        }
+    }
+
+    if (mode & File::FREAD) {
+        // 检查读权限
+        bool canRead = false;
+        if (u.u_uid == 0) {
+            canRead = true;
+        } else if (p_inodeOpenFile->i_uid == u.u_uid) {
+            canRead = (p_inodeOpenFile->i_mode & Inode::S_IRUSR) != 0;
+        } else if (p_inodeOpenFile->i_gid == u.u_gid) {
+            canRead = (p_inodeOpenFile->i_mode & Inode::S_IRGRP) != 0;
+        } else {
+            canRead = (p_inodeOpenFile->i_mode & Inode::S_IROTH) != 0;
+        }
+        if (!canRead) {
+            Logcat::log("权限错误：没有读权限！");
+            return ERROR_OPEN_ILLEGAL;
+        }
+    }
+    // ====== 权限检查结束 ======
+
     //Step3. 分配FILE结构
     File *pFile = Kernel::instance()->m_OpenFileTable.FAlloc();
     if (pFile == NULL)
@@ -469,7 +510,6 @@ FileFd VFS::open(Path path, int mode)
         return ERROR_OUTOF_OPENFILE;
     }
     //Step4. 建立钩连关系,u_ofile[]中的一项指向FILE
-    User &u = VirtualProcess::Instance()->getUser();
     /* 在进程打开文件描述符表中获取一个空闲项 */
     fd = u.u_ofiles.AllocFreeSlot();
     if (fd < 0) /* 如果寻找空闲项失败 */

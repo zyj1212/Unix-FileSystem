@@ -51,6 +51,46 @@ public:
   static const unsigned int IFCHR = 0x2000;                                                                                   //文件类型：字符设备
   static const unsigned int IFBLK = 0x6000;                                                                                   //块设备特殊类型文件，为0表示常规数据文件
 
+  // ====== 文件权限位（rwx） ======
+  // 先取消 POSIX 同名宏定义，避免命名冲突
+  #ifdef S_IRUSR
+  #undef S_IRUSR
+  #undef S_IWUSR
+  #undef S_IXUSR
+  #undef S_IRGRP
+  #undef S_IWGRP
+  #undef S_IXGRP
+  #undef S_IROTH
+  #undef S_IWOTH
+  #undef S_IXOTH
+  #undef S_IRWXU
+  #undef S_IRWXG
+  #undef S_IRWXO
+  #endif
+
+  // 所有者权限
+  static const unsigned int S_IRUSR = 0x0100;  // 所有者读   (0400)
+  static const unsigned int S_IWUSR = 0x0080;  // 所有者写   (0200)
+  static const unsigned int S_IXUSR = 0x0040;  // 所有者执行 (0100)
+  // 组用户权限
+  static const unsigned int S_IRGRP = 0x0020;  // 组用户读   (0040)
+  static const unsigned int S_IWGRP = 0x0010;  // 组用户写   (0020)
+  static const unsigned int S_IXGRP = 0x0008;  // 组用户执行 (0010)
+  // 其他用户权限
+  static const unsigned int S_IROTH = 0x0004;  // 其他用户读 (0004)
+  static const unsigned int S_IWOTH = 0x0002;  // 其他用户写 (0002)
+  static const unsigned int S_IXOTH = 0x0001;  // 其他用户执行 (0001)
+
+  // 常用权限组合（八进制表示法）
+  static const unsigned int S_IRWXU = 0x01C0;  // rwx --- --- (0700)
+  static const unsigned int S_IRWXG = 0x0038;  // --- rwx --- (0070)
+  static const unsigned int S_IRWXO = 0x0007;  // --- --- rwx (0007)
+
+  // 默认文件权限 0644 = rw-r--r--
+  static const unsigned int DEFAULT_FILE_MODE = 0x0184;  // S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH
+  // 默认目录权限 0755 = rwxr-xr-x
+  static const unsigned int DEFAULT_DIR_MODE  = 0x01ED;  // S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH
+
   Inode();                  //构造函数
   Inode(DiskInode d_inode); //转换构造函数
   int Bmap(int lbn);        //根据逻辑块号查混合索引表，得到物理块号。

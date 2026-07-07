@@ -71,9 +71,11 @@ enum INSTRUCT
     RMDIR,
     LOGIN,
     USERADD,
-    WHOAMI
+    WHOAMI,
+    CHMOD,
+    CHOWN
 };
-const int INST_NUM = 19;
+const int INST_NUM = 21;
 //NOTE 注意，如果改了上面的枚举类型，那么下面的这个数字也需要相应修改
 
 static const char *instructStr[]{
@@ -95,7 +97,9 @@ static const char *instructStr[]{
     "rmdir",
     "login",
     "useradd",
-    "whoami"};
+    "whoami",
+    "chmod",
+    "chown"};
 enum FileType
 {
     NORMAL_FILE,
