@@ -305,11 +305,14 @@ InodeId VFS::deleteDirect(const char *fileName)
     Inode *p_delete_inode = inodeCache->getInodeByID(deleteFileInode);
     Inode *p_dirInode = inodeCache->getInodeByID(p_ext2->locateDir(path));
 
-    BlkNum phyno;
-    //Step1 释放盘块
-    for (int lbn = 0; (phyno = p_delete_inode->Bmap(lbn)) > 0; lbn++)
+    //Step1 释放盘块 — 直接读 i_addr[]，不调 Bmap()（Bmap 会为 0 的项自动分配新块！）
+    for (int i = 0; i < 10; i++)
     {
-        superBlockCache->bfree(phyno);
+        if (p_delete_inode->i_addr[i] > 0)
+        {
+            superBlockCache->bfree(p_delete_inode->i_addr[i]);
+            p_delete_inode->i_addr[i] = 0;
+        }
     }
     //Step2 删除目录项
     int dirblkno = p_dirInode->Bmap(0); //Bmap查物理块号

@@ -74,11 +74,12 @@ enum INSTRUCT
     WHOAMI,
     CHMOD,
     CHOWN,
+    CAT,
     DIR,
     HISTORY,
     LOGOUT
 };
-const int INST_NUM = 24;
+const int INST_NUM = 25;
 //NOTE 注意，如果改了上面的枚举类型，那么下面的这个数字也需要相应修改
 
 static const char *instructStr[]{
@@ -103,6 +104,7 @@ static const char *instructStr[]{
     "whoami",
     "chmod",
     "chown",
+    "cat",
     "dir",
     "history",
     "logout"};

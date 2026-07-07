@@ -199,6 +199,9 @@ void Shell::parseCmd()
     case CHOWN:
         chown();
         break;
+    case CAT:
+        cat();
+        break;
     case DIR:
         dir();
         break;
