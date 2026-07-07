@@ -708,6 +708,12 @@ int VFS::write(int fd, u_int8_t *content, int length)
     p_inode->i_flag |= Inode::IUPD;
 
     Buf *pBuf;
+    // 更新文件大小
+    int endOffset = p_file->f_offset + length;
+    if (endOffset > p_inode->i_size) {
+        p_inode->i_size = endOffset;
+    }
+
     while (writeByteCount < length) //NOTE 这里是<还是<=再考虑一下
     {
         BlkNum logicBlkno = p_file->f_offset / DISK_BLOCK_SIZE; //逻辑盘块号
