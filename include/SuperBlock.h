@@ -22,8 +22,9 @@ public:
   int total_inode_num;           //总inode数
   InodeId s_inode[MAX_INODE_NUM-1];   //空闲inode栈，用于管理inode的分配和回收
   Bitmap disk_block_bitmap;      //用bitmap管理空闲盘块
-  char padding[1504];            //NOTE:这个1504是手工计算的结果。只针对ubuntu系统，也许别的机器就不对了。
-                                 //确保一个SuperBlock填满一个block
+  // padding 确保 SuperBlock 恰好占满一个磁盘块
+  // sizeof(other fields) ≈ 8(size_t)+16(4 ints)+368(s_inode[92])+2056(Bitmap) = 2448
+  char padding[DISK_BLOCK_SIZE - 2448];
 
   BlkNum balloc();
   void bfree(BlkNum blkNum);

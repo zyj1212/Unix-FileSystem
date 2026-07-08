@@ -68,7 +68,7 @@ void Ext2::format()
     //②构造DiskInode,修改InodePool,将InodePool写入磁盘img (block 2,3,4)
     InodePool tempInodePool;
     int tempAddr[15] = {5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    DiskInode tempDiskInode = DiskInode(Inode::IFDIR, 1, 0, 0, 6 * sizeof(DirectoryEntry), tempAddr, TimeHelper::getCurTime(), TimeHelper::getCurTime(), TimeHelper::getCurTime());
+    DiskInode tempDiskInode = DiskInode(Inode::IFDIR | Inode::DEFAULT_DIR_MODE, 1, 0, 0, 6 * sizeof(DirectoryEntry), tempAddr, TimeHelper::getCurTime(), TimeHelper::getCurTime(), TimeHelper::getCurTime());
     tempInodePool.iupdate(1, tempDiskInode);
     //1#inode，是根目录
     tempDiskInode.d_addr[0] = 6;
@@ -263,58 +263,51 @@ void Ext2::readDiskInode(int inodeID, DiskInode &diskInode)
 
 int Ext2::iAssign(Inode **ppInode)
 {
-    int inodeNumber = 0;
     Inode *pInode = NULL;
     DiskInode diskInode;
-    //获取已分配的inode号
-    for (inodeNumber = 0; inodeNumber < MAX_INODE_NUM - 1; inodeNumber++)
-    {
-        //不是0表示这个inode已经被分配了，现在要找出一个未被分配的
-        if (bitMap.getBitStat(inodeNumber))
-        {
-            continue;
-        }
-        else
-        {
-            bitMap.setBit(inodeNumber);
-            break;
-        }
-    }
-    if (inodeNumber >= MAX_INODE_NUM - 1)
+
+    // 使用 SuperBlockCache 的 inode 栈分配，获取 free inode 号
+    InodeId inodeNumber = Kernel::instance()->getSuperBlockCache().ialloc();
+    if (inodeNumber <= 0)
     {
         return ERROR_OUTOF_INODE;
     }
 
-    //对DiskInode进行初始化
+    // 初始化 DiskInode
     memset(&diskInode, 0, sizeof(diskInode));
     for (int i = 0; i < 15; i++)
     {
         diskInode.d_addr[i] = 0;
     }
-    //设置扩展属性
     diskInode.d_mode = 0;
     diskInode.d_nlink = 1;
-    diskInode.d_uid = 0;
-    diskInode.d_gid = 0;
+    diskInode.d_uid = VirtualProcess::Instance()->Getuid();
+    diskInode.d_gid = VirtualProcess::Instance()->Getgid();
     diskInode.d_size = 0;
     diskInode.d_atime = TimeHelper::getCurTime();
     diskInode.d_mtime = TimeHelper::getCurTime();
-    //刷入磁盘inode
+    diskInode.d_ctime = TimeHelper::getCurTime();
+
+    // 刷入磁盘 inode
     updateDiskInode(inodeNumber, diskInode);
-    //获取内存Inode
-    BufferCache &bc = Kernel::instance()->getBufferCache();
-    pInode = Kernel::instance()->getInodeCache().cacheInode(inodeNumber);
+
+    // 载入内存 Inode 缓存
+    if (Kernel::instance()->getInodeCache().addInodeCache(diskInode, inodeNumber) < 0)
+    {
+        return ERROR_OUTOF_INODE;
+    }
+    pInode = Kernel::instance()->getInodeCache().getInodeByID(inodeNumber);
     if (pInode == NULL)
     {
         return ERROR_OUTOF_INODE;
     }
+
     pInode->i_mode = 0;
     pInode->i_nlink = 1;
-    pInode->i_uid = 0;
-    pInode->i_gid = 0;
+    pInode->i_uid = VirtualProcess::Instance()->Getuid();
+    pInode->i_gid = VirtualProcess::Instance()->Getgid();
     pInode->i_size = 0;
-    pInode->i_atime = 0;
-    pInode->i_mtime = 0;
+    pInode->i_ctime = TimeHelper::getCurTime();
 
     *ppInode = pInode;
     return OK;
@@ -325,4 +318,86 @@ int Ext2::iAssign(Inode **ppInode)
 void Ext2::iFree(int inodeId)
 {
     Kernel::instance()->getSuperBlockCache().ifree(inodeId);
+}
+
+Ext2_Status Ext2::getExt2Status()
+{
+    return ext2_status;
+}
+
+// 从磁盘读取指定 inode 号的 DiskInode
+DiskInode Ext2::getDiskInodeByNum(int inodeID)
+{
+    int blkno = 3 + inodeID / (DISK_BLOCK_SIZE / DISKINODE_SIZE);
+    Buf *pBuf;
+    pBuf = p_bufferCache->Bread(blkno);
+    DiskInode *p_diskInode = (DiskInode *)pBuf->b_addr;
+    DiskInode tempDiskInode;
+    tempDiskInode = *(p_diskInode + inodeID % (DISK_BLOCK_SIZE / DISKINODE_SIZE));
+    p_bufferCache->Brelse(pBuf);
+    return tempDiskInode;
+}
+
+// 根据路径查找 inode 号
+InodeId Ext2::locateInode(Path &path)
+{
+    InodeId dirInodeId = locateDir(path);
+    if (path.level == 0)
+    {
+        return ROOT_INODE_ID;
+    }
+    else
+    {
+        return getInodeIdInDir(dirInodeId, path.getInodeName());
+    }
+}
+
+// 根据路径查找父目录的 inode 号
+InodeId Ext2::locateDir(Path &path)
+{
+    InodeId dirInode;
+    if (path.from_root)
+    {
+        dirInode = ROOT_INODE_ID;
+    }
+    else
+    {
+        dirInode = VirtualProcess::Instance()->getUser().curDirInodeId;
+    }
+
+    for (int i = 0; i < path.level - 1; i++)
+    {
+        dirInode = getInodeIdInDir(dirInode, path.path[i]);
+        if (dirInode < 0)
+        {
+            return ERROR_PATH_NFOUND;
+        }
+    }
+    return dirInode;
+}
+
+// 在指定目录中按文件名线性搜索 inode 号
+InodeId Ext2::getInodeIdInDir(InodeId dirInodeId, FileName fileName)
+{
+    Inode *p_dirInode = Kernel::instance()->getInodeCache().getInodeByID(dirInodeId);
+    int blkno = p_dirInode->Bmap(0);
+    Buf *pBuf;
+    pBuf = Kernel::instance()->getBufferCache().Bread(blkno);
+    DirectoryEntry *p_directoryEntry = (DirectoryEntry *)pBuf->b_addr;
+
+    for (int i = 0; i < DISK_BLOCK_SIZE / sizeof(DirectoryEntry); i++)
+    {
+        if ((p_directoryEntry->m_ino != 0) && (!strcmp(p_directoryEntry->m_name, fileName)))
+        {
+            return p_directoryEntry->m_ino;
+        }
+        p_directoryEntry++;
+    }
+    Kernel::instance()->getBufferCache().Brelse(pBuf);
+    return -1;
+}
+
+int Ext2::bmap(int inodeNum, int logicBlockNum)
+{
+    return OK;
 }

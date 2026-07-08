@@ -13,8 +13,9 @@ class InodePool{
   //TODO
   private:
     Bitmap inodePoolBitmap;
-    char padding[2048];  //NOTE 手工计算: 3*4096(12288) - 2056(bitmap) - 93*88(8184) = 2048
-    DiskInode inodeBlock[MAX_INODE_NUM];  //INODE数组存放区域  Inode的大小为64字节
+    char padding1[DISK_BLOCK_SIZE - sizeof(Bitmap)];  // 确保 Bitmap 填满 block 2
+    DiskInode inodeBlock[MAX_INODE_NUM];              // INODE数组 — 从 block 3 开始
+    char padding2[2 * DISK_BLOCK_SIZE - MAX_INODE_NUM * sizeof(DiskInode)];  // 填满 block 3,4
     
 
   public:

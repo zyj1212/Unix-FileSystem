@@ -93,7 +93,7 @@ public:
   static const unsigned int S_IRWXO = 0x0007;  // --- --- rwx (0007)
 
   // 默认文件权限 0644 = rw-r--r--
-  static const unsigned int DEFAULT_FILE_MODE = 0x0184;  // S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH
+  static const unsigned int DEFAULT_FILE_MODE = 0x01A4;  // S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH (0644)
   // 默认目录权限 0755 = rwxr-xr-x
   static const unsigned int DEFAULT_DIR_MODE  = 0x01ED;  // S_IRWXU|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH
 

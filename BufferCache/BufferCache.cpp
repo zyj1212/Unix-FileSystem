@@ -97,7 +97,7 @@ void BufferCache::Bwrite(Buf *bp)
     {
         diskDriver->writeBlk(bp->b_blkno, *bp->b_addr);
         bp->b_flags |= Buf::B_DONE;
-        std::cout << bp->b_blkno << std::endl;
+        //std::cout << bp->b_blkno << std::endl;
     }
 
     return;

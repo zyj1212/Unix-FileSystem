@@ -32,7 +32,10 @@ public:
   int setBufferCache(BufferCache *p_bufferCache);
   int allocNewInode(); //分配一个新的inode
   DiskInode getDiskInodeByNum(int inodeID);
+  void readDiskInode(int inodeID, DiskInode &diskInode);
   void updateDiskInode(int inodeID, DiskInode diskInode);
+  int iAssign(Inode **ppInode);
+  void iFree(int inodeId);
 
   InodeId locateInode(Path &path);
   InodeId locateDir(Path &path);
