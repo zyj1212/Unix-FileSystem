@@ -39,7 +39,7 @@ void Ext2::format()
     tempSuperBlock.free_inode_num -= 5;
 
     // ①-1 写入 SuperBlock 到 block 0
-    memcpy(diskMemAddr, &tempSuperBlock, DISK_BLOCK_SIZE);
+    memcpy(diskMemAddr, &tempSuperBlock, sizeof(SuperBlock));
 
     // ①-2 写入 GDT 到 block 1
     BlockGroupDesc tempGDT;
@@ -222,7 +222,7 @@ void Ext2::loadSuperBlock(SuperBlock &superBlock)
     //User &u = VirtualProcess::Instance()->getUser();
     Buf *pBuf;
     pBuf = p_bufferCache->Bread(0);
-    memcpy(&superBlock, pBuf->b_addr, DISK_BLOCK_SIZE);
+    memcpy(&superBlock, pBuf->b_addr, sizeof(SuperBlock));
     p_bufferCache->Brelse(pBuf);
 }
 
@@ -249,106 +249,80 @@ void Ext2::updateDiskInode(int inodeID, DiskInode diskInode)
     p_bufferCache->Bdwrite(pBuf); //bdwrite中会做brelse的。
     //p_bufferCache->Brelse(pBuf);
 }
-//从disk中读取出一个制定inodeID的DiskInode.可能涉及io了（不确定在不在缓存中）
-DiskInode Ext2::getDiskInodeByNum(int inodeID)
+void Ext2::readDiskInode(int inodeID, DiskInode &diskInode)
 {
-    //inode分布在两个盘块上，首先根据inodeID计算在哪个盘块上
-    int blkno = 3 + inodeID / (DISK_BLOCK_SIZE / DISKINODE_SIZE);
+    int blkno;
+    blkno = 3 + inodeID / (DISK_BLOCK_SIZE / DISKINODE_SIZE);
     Buf *pBuf;
     pBuf = p_bufferCache->Bread(blkno);
     DiskInode *p_diskInode = (DiskInode *)pBuf->b_addr;
-    DiskInode tempDiskInode;
-    tempDiskInode = *(p_diskInode + inodeID % (DISK_BLOCK_SIZE / DISKINODE_SIZE));
+    p_diskInode = p_diskInode + inodeID % (DISK_BLOCK_SIZE / DISKINODE_SIZE);
+    diskInode = *p_diskInode;
     p_bufferCache->Brelse(pBuf);
-    return tempDiskInode; //外部可能会调用DiskInode的拷贝构造函数
 }
 
-/**
- * 功能：根据路径，做线性目录搜索
- * VFS在inodeDirectoryCache失效的时候，会调用本函数，在磁盘上根据路径确定inode号。
- * 
- */
-InodeId Ext2::locateInode(Path &path)
+int Ext2::iAssign(Inode **ppInode)
 {
-
-    InodeId dirInodeId = locateDir(path); //先确定其父目录的inode号
-    if (path.level == 0)
+    int inodeNumber = 0;
+    Inode *pInode = NULL;
+    DiskInode diskInode;
+    //获取已分配的inode号
+    for (inodeNumber = 0; inodeNumber < MAX_INODE_NUM - 1; inodeNumber++)
     {
-        return ROOT_INODE_ID;
-    }
-    else
-    {
-        return getInodeIdInDir(dirInodeId, path.getInodeName());
-    }
-}
-
-/**
- * VFS在inodeDirectoryCache失效的时候，会调用本函数，在磁盘上根据路径确定
- * 一个路径截至最后一层之前的目录inode号
- */
-InodeId Ext2::locateDir(Path &path)
-{
-
-    InodeId dirInode;   //目录文件的inode号
-    if (path.from_root) //如果是绝对路径,从根inode开始搜索
-    {
-        dirInode = ROOT_INODE_ID;
-    }
-    else //如果是相对路径，从当前inode号开始搜索
-    {
-        dirInode = VirtualProcess::Instance()->getUser().curDirInodeId;
-    }
-
-    for (int i = 0; i < path.level - 1; i++)
-    {
-        dirInode = getInodeIdInDir(dirInode, path.path[i]);
-        if (dirInode < 0)
+        //不是0表示这个inode已经被分配了，现在要找出一个未被分配的
+        if (bitMap.getBitStat(inodeNumber))
         {
-            return ERROR_PATH_NFOUND; //没有找到
+            continue;
+        }
+        else
+        {
+            bitMap.setBit(inodeNumber);
+            break;
         }
     }
-
-    return dirInode;
-}
-
-/**
- * 线性目录搜索的步骤：根据文件名在目录文件（已知inode号）中查找inode号。
- * 可以知道目录搜索的起点一定是已知的inode号，要么是cur要么是ROOT
- */
-InodeId Ext2::getInodeIdInDir(InodeId dirInodeId, FileName fileName)
-{
-    //Step1:先根据目录inode号dirInodeId获得目录inode对象
-    Inode *p_dirInode = Kernel::instance()->getInodeCache().getInodeByID(dirInodeId);
-    //TODO 错误处理
-    //Step2：读取该inode指示的数据块
-    int blkno = p_dirInode->Bmap(0); //Bmap查物理块号
-    Buf *pBuf;
-    pBuf = Kernel::instance()->getBufferCache().Bread(blkno);
-    DirectoryEntry *p_directoryEntry = (DirectoryEntry *)pBuf->b_addr;
-    //Step3：访问这个目录文件中的entry，搜索（同时缓存到dentryCache中）
-    //TODO 缓存到dentryCache中
-    for (int i = 0; i < DISK_BLOCK_SIZE / sizeof(DirectoryEntry); i++)
+    if (inodeNumber >= MAX_INODE_NUM - 1)
     {
-        if ((p_directoryEntry->m_ino != 0) && (!strcmp(p_directoryEntry->m_name, fileName)))
-        {
-            return p_directoryEntry->m_ino;
-        } //ino==0表示该文件被删除
-        p_directoryEntry++;
+        return ERROR_OUTOF_INODE;
     }
 
-    Kernel::instance()->getBufferCache().Brelse(pBuf);
-    return -1;
-}
+    //对DiskInode进行初始化
+    memset(&diskInode, 0, sizeof(diskInode));
+    for (int i = 0; i < 15; i++)
+    {
+        diskInode.d_addr[i] = 0;
+    }
+    //设置扩展属性
+    diskInode.d_mode = 0;
+    diskInode.d_nlink = 1;
+    diskInode.d_uid = 0;
+    diskInode.d_gid = 0;
+    diskInode.d_size = 0;
+    diskInode.d_atime = TimeHelper::getCurTime();
+    diskInode.d_mtime = TimeHelper::getCurTime();
+    //刷入磁盘inode
+    updateDiskInode(inodeNumber, diskInode);
+    //获取内存Inode
+    BufferCache &bc = Kernel::instance()->getBufferCache();
+    pInode = Kernel::instance()->getInodeCache().cacheInode(inodeNumber);
+    if (pInode == NULL)
+    {
+        return ERROR_OUTOF_INODE;
+    }
+    pInode->i_mode = 0;
+    pInode->i_nlink = 1;
+    pInode->i_uid = 0;
+    pInode->i_gid = 0;
+    pInode->i_size = 0;
+    pInode->i_atime = 0;
+    pInode->i_mtime = 0;
 
-int Ext2::bmap(int inodeNum, int logicBlockNum)
-{
-
+    *ppInode = pInode;
     return OK;
-} //文件中的地址映射。查混合索引表，确定物理块号。
-  //逻辑块号bn=u_offset/512
-
-Ext2_Status Ext2::getExt2Status()
-{
-    return ext2_status;
 }
-// File maintained for Unix FileSystem course project - experiment 2 update 
+/**
+ * 释放一个inode，交给superBlockCache管理
+ */
+void Ext2::iFree(int inodeId)
+{
+    Kernel::instance()->getSuperBlockCache().ifree(inodeId);
+}
