@@ -67,7 +67,10 @@ int VFS::format()
             break;
         case Ext2_NOFORM:
             p_ext2->format();
-            // 格式化后自动创建 /etc/passwd
+            // 格式化后清空所有缓存，确保从新磁盘读取
+            inodeCache->clearCache();
+            // 格式化后自动创建 /etc/passwd，并将当前目录设回根目录
+            VirtualProcess::Instance()->getUser().curDirInodeId = 1;
             createPasswdFile(this);
             break;
         case Ext2_READY:
@@ -79,7 +82,10 @@ int VFS::format()
                 if (temp_cmd == 'y')
                 {
                     p_ext2->format();
-                    // 格式化后自动创建 /etc/passwd
+                    // 格式化后清空所有缓存
+                    inodeCache->clearCache();
+                    // 重置当前目录为根，再创建 passwd
+                    VirtualProcess::Instance()->getUser().curDirInodeId = 1;
                     createPasswdFile(this);
                     break;
                 }

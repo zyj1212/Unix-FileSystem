@@ -164,10 +164,12 @@ void Ext2::format()
     tempDirctoryEntry.m_ino = 1;
     *p_directoryEntry = tempDirctoryEntry;
 
-    //test:
-    p_bufferCache->unmount();
-    p_bufferCache->mount();
-    //如果格式话成功，将ext2_status置ready
+    // 格式化完成后：丢弃所有旧缓存（不刷回！否则旧数据会覆盖新磁盘）
+    // 只需重新初始化缓存层，不执行 Bflush
+    p_bufferCache->initialize();
+    // 重新装载磁盘驱动以便读取新数据
+    Kernel::instance()->getDiskDriver().mount();
+    //如果格式化成功，将ext2_status置ready
     ext2_status = Ext2_READY;
 }
 
