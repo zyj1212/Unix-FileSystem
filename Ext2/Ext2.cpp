@@ -166,9 +166,9 @@ void Ext2::format()
 
     // 格式化完成后：丢弃所有旧缓存（不刷回！否则旧数据会覆盖新磁盘）
     // 只需重新初始化缓存层，不执行 Bflush
+    // 注意：不调用 diskDriver.mount()，因为 diskMemAddr 已经在第一次 mount 时映射好了
+    //        如果再次 mount 会导致二次 mmap，覆盖刚刚写入的新数据
     p_bufferCache->initialize();
-    // 重新装载磁盘驱动以便读取新数据
-    Kernel::instance()->getDiskDriver().mount();
     //如果格式化成功，将ext2_status置ready
     ext2_status = Ext2_READY;
 }
