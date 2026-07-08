@@ -38,10 +38,8 @@ void Ext2::format()
     //tempSuperBlock.free_block_bum -= 9;
     tempSuperBlock.free_inode_num -= 5;
 
-    SuperBlock *p_superBlock = (SuperBlock *)diskMemAddr;
-    *p_superBlock = tempSuperBlock; //没有动态申请，不用管深浅拷贝
-    p_superBlock++;
-    diskMemAddr = (DiskBlock *)p_superBlock;
+    // ①-1 写入 SuperBlock 到 block 0
+    memcpy(diskMemAddr, &tempSuperBlock, DISK_BLOCK_SIZE);
 
     // ①-2 写入 GDT 到 block 1
     BlockGroupDesc tempGDT;
@@ -52,10 +50,7 @@ void Ext2::format()
     tempGDT.bg_free_blocks_count = DISK_BLOCK_NUM - 10;                  // 已占用 10 块
     tempGDT.bg_free_inodes_count = (MAX_INODE_NUM - 1) - 5;              // 已用 5 个 inode (根+4目录)
     tempGDT.bg_used_dirs_count = 5;                                      // 5 个目录
-    BlockGroupDesc *p_gdt = (BlockGroupDesc *)diskMemAddr;
-    *p_gdt = tempGDT;
-    p_gdt++;
-    diskMemAddr = (DiskBlock *)p_gdt;
+    memcpy(diskMemAddr + 1, &tempGDT, DISK_BLOCK_SIZE);
     // 送一份到 VFS 的 GDT 缓存
     Kernel::instance()->getBlockGroupDescCache().desc = tempGDT;
     Kernel::instance()->getBlockGroupDescCache().dirty = false;
@@ -70,7 +65,7 @@ void Ext2::format()
     Kernel::instance()->getSuperBlockCache().disk_block_bitmap = tempSuperBlock.disk_block_bitmap; //用bitmap管理空闲盘块
     memcpy(Kernel::instance()->getSuperBlockCache().s_inode, tempSuperBlock.s_inode, sizeof(tempSuperBlock.s_inode));
 
-    //②构造DiskInode,修改InodePool,将InodePool写入磁盘img
+    //②构造DiskInode,修改InodePool,将InodePool写入磁盘img (block 2,3,4)
     InodePool tempInodePool;
     int tempAddr[15] = {5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     DiskInode tempDiskInode = DiskInode(Inode::IFDIR, 1, 0, 0, 6 * sizeof(DirectoryEntry), tempAddr, TimeHelper::getCurTime(), TimeHelper::getCurTime(), TimeHelper::getCurTime());
@@ -92,14 +87,12 @@ void Ext2::format()
     tempDiskInode.d_size = sizeof(DirectoryEntry) * 2;
     tempInodePool.iupdate(5, tempDiskInode);
     //5#inode，是dev
-    InodePool *p_InodePool = (InodePool *)diskMemAddr;
-    *p_InodePool = tempInodePool;
-    p_InodePool++;
-    diskMemAddr = (DiskBlock *)p_InodePool;
+    memcpy(diskMemAddr + 2, &tempInodePool, 3 * DISK_BLOCK_SIZE);
 
-    //③数据区写入目录文件
-    DirectoryEntry *p_directoryEntry = (DirectoryEntry *)diskMemAddr;
+    //③数据区写入目录文件 (block 5 = 根目录, block 6 = bin, block 7 = etc, block 8 = dev, block 9 = home)
+    DirectoryEntry *p_directoryEntry = (DirectoryEntry *)(diskMemAddr + 5);
     DirectoryEntry tempDirctoryEntry;
+    // block 5: 根目录文件 (. .. bin etc dev home)
     strcpy(tempDirctoryEntry.m_name, ".");
     tempDirctoryEntry.m_ino = 1;
     *p_directoryEntry = tempDirctoryEntry;
@@ -124,8 +117,8 @@ void Ext2::format()
     tempDirctoryEntry.m_ino = 5;
     *p_directoryEntry = tempDirctoryEntry;
 
-    diskMemAddr++; //移动到下一个盘块，写bin目录
-    p_directoryEntry = (DirectoryEntry *)diskMemAddr;
+    // block 6: bin目录 (. ..)
+    p_directoryEntry = (DirectoryEntry *)(diskMemAddr + 6);
     strcpy(tempDirctoryEntry.m_name, ".");
     tempDirctoryEntry.m_ino = 2;
     *p_directoryEntry = tempDirctoryEntry;
@@ -134,8 +127,8 @@ void Ext2::format()
     tempDirctoryEntry.m_ino = 1;
     *p_directoryEntry = tempDirctoryEntry;
 
-    diskMemAddr++; //移动到下一个盘块，写etc目录
-    p_directoryEntry = (DirectoryEntry *)diskMemAddr;
+    // block 7: etc目录 (. ..)
+    p_directoryEntry = (DirectoryEntry *)(diskMemAddr + 7);
     strcpy(tempDirctoryEntry.m_name, ".");
     tempDirctoryEntry.m_ino = 3;
     *p_directoryEntry = tempDirctoryEntry;
@@ -144,8 +137,8 @@ void Ext2::format()
     tempDirctoryEntry.m_ino = 1;
     *p_directoryEntry = tempDirctoryEntry;
 
-    diskMemAddr++; //移动到下一个盘块，写dev目录
-    p_directoryEntry = (DirectoryEntry *)diskMemAddr;
+    // block 8: dev目录 (. ..)
+    p_directoryEntry = (DirectoryEntry *)(diskMemAddr + 8);
     strcpy(tempDirctoryEntry.m_name, ".");
     tempDirctoryEntry.m_ino = 4;
     *p_directoryEntry = tempDirctoryEntry;
@@ -154,8 +147,8 @@ void Ext2::format()
     tempDirctoryEntry.m_ino = 1;
     *p_directoryEntry = tempDirctoryEntry;
 
-    diskMemAddr++; //移动到下一个盘块，写home目录
-    p_directoryEntry = (DirectoryEntry *)diskMemAddr;
+    // block 9: home目录 (. ..)
+    p_directoryEntry = (DirectoryEntry *)(diskMemAddr + 9);
     strcpy(tempDirctoryEntry.m_name, ".");
     tempDirctoryEntry.m_ino = 5;
     *p_directoryEntry = tempDirctoryEntry;
