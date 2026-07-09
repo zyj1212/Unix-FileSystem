@@ -387,6 +387,9 @@ void Shell::cat()
     }
     buf[totalRead] = '\0';
     printf("%s", buf);
+    if (totalRead > 0 && buf[totalRead - 1] != '\n') {
+        printf("\n");
+    }
 
     bounded_VFS->close(fd);
 }
