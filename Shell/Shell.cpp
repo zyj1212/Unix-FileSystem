@@ -513,18 +513,32 @@ void Shell::store()
 {
     if (getParamAmount() == 3)
     {
-        InodeId desInodeId;
         //STORE的步骤
-        //Step1：创建文件（如果有同名的返回失败）
-        desInodeId = bounded_VFS->createFile(getParam(2));
-        if (desInodeId < 0)
+        //Step1：确保目标文件存在（不存在则创建，存在则直接打开覆盖）
+        Path desPath(getParam(2));
+        InodeId desInodeId = bounded_VFS->getExt2()->locateInode(desPath);
+        FileFd fd_des;
+        if (desInodeId > 0)
         {
-            Logcat::log("ERROR!目标文件名已存在！");
+            // 文件已存在，直接打开覆盖
+            fd_des = bounded_VFS->open(desPath, File::FWRITE);
+        }
+        else
+        {
+            // 文件不存在，先创建
+            desInodeId = bounded_VFS->createFile(getParam(2));
+            if (desInodeId < 0)
+            {
+                Logcat::log("ERROR!创建目标文件失败！");
+                return;
+            }
+            fd_des = bounded_VFS->open(desPath, File::FWRITE);
+        }
+        if (fd_des < 0)
+        {
+            Logcat::log("ERROR!打开目标文件失败！");
             return;
         }
-        //Step2：打开文件
-        Path desPath(getParam(2));
-        FileFd fd_des = bounded_VFS->open(desPath, File::FWRITE);
         //Step3：写入文件
         FILE *fd_src = fopen(getParam(1), "rb");
         if (fd_src == NULL)
