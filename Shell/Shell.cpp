@@ -541,25 +541,35 @@ void Shell::store()
         }
         //Step3：写入文件
         FILE *fd_src = fopen(getParam(1), "rb");
-        if (fd_src == NULL)
+        if (fd_src != NULL)
         {
-            Logcat::log("源文件打开失败！");
-            return;
+            // 外部文件存在，从外部文件读取并写入
+            DiskBlock tempBuf;
+            int file_size = 0;
+            while (!feof(fd_src))
+            {
+                int readsize = fread(&tempBuf, 1, DISK_BLOCK_SIZE, fd_src);
+                file_size += readsize;
+                bounded_VFS->write(fd_des, (u_int8_t *)&tempBuf, readsize);
+            }
+            fclose(fd_src);
+            Inode *p_desInode = Kernel::instance()->getInodeCache().getInodeByID(desInodeId);
+            p_desInode->i_size = file_size;
         }
-        DiskBlock tempBuf;
-        int file_size = 0;
-        while (!feof(fd_src))
+        else
         {
-            //int blkCount = 0;
-            int readsize = fread(&tempBuf, 1, DISK_BLOCK_SIZE, fd_src);
-            file_size += readsize;
-            bounded_VFS->write(fd_des, (u_int8_t *)&tempBuf, readsize);
+            // 外部文件不存在，将参数1的内容直接作为文本写入
+            const char *content = getParam(1);
+            int contentLen = strlen(content);
+            if (contentLen > 0)
+            {
+                bounded_VFS->write(fd_des, (u_int8_t *)content, contentLen);
+                Inode *p_desInode = Kernel::instance()->getInodeCache().getInodeByID(desInodeId);
+                p_desInode->i_size = contentLen;
+            }
         }
-        Inode *p_desInode = Kernel::instance()->getInodeCache().getInodeByID(desInodeId);
-        p_desInode->i_size = file_size; //TODO这一块不太好，封装性差了点
 
         //Step4：关闭文件
-        fclose(fd_src);
         bounded_VFS->close(fd_des);
     }
     else
