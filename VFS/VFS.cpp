@@ -484,12 +484,8 @@ void VFS::dir(InodeId dirInodeID)
             // 文件名
             printf("%-28s  ", p_directoryEntry->m_name);
 
-            // 物理地址：第一个数据块的物理块号（直接读 i_addr，避免 Bmap 误分配）
-            int firstBlk = p_fileInode->i_addr[0];
-            if (firstBlk <= 0)
-                printf("%-10s  ", "-");
-            else
-                printf("%-10d  ", firstBlk);
+            // 物理地址：显示inode号
+            printf("%-10d  ", p_directoryEntry->m_ino);
 
             // 保护码：将i_mode格式化为类似Unix的权限字符串
             char modeStr[11];

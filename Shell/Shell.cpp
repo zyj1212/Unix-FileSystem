@@ -68,9 +68,43 @@ int Shell::readUserInput()
         //splitCmd先清空一下
         memset(split_cmd, 0x0, sizeof(split_cmd));
         int cmd_param_seq = 0;
-        for (char *p = strtok(dupl_tty_buffer, " "); p != nullptr; p = strtok(NULL, " "), cmd_param_seq++)
+        char *p = dupl_tty_buffer;
+        while (*p && cmd_param_seq < MAX_PARAM_NUM)
         {
-            strcpy(split_cmd[cmd_param_seq], p);
+            // 跳过前导空格和tab
+            while (*p == ' ' || *p == '\t')
+                p++;
+            if (!*p)
+                break;
+
+            if (*p == '"')
+            {
+                // 引号包裹的参数（支持带空格）
+                p++;
+                char *start = p;
+                while (*p && *p != '"')
+                    p++;
+                int len = p - start;
+                if (len >= MAX_SINGLE_PARAM_LEN)
+                    len = MAX_SINGLE_PARAM_LEN - 1;
+                strncpy(split_cmd[cmd_param_seq], start, len);
+                split_cmd[cmd_param_seq][len] = '\0';
+                if (*p == '"')
+                    p++; // 跳过结束引号
+            }
+            else
+            {
+                // 普通参数（空格分隔）
+                char *start = p;
+                while (*p && *p != ' ' && *p != '\t')
+                    p++;
+                int len = p - start;
+                if (len >= MAX_SINGLE_PARAM_LEN)
+                    len = MAX_SINGLE_PARAM_LEN - 1;
+                strncpy(split_cmd[cmd_param_seq], start, len);
+                split_cmd[cmd_param_seq][len] = '\0';
+            }
+            cmd_param_seq++;
         }
         param_num = cmd_param_seq;
 #ifdef IS_DEBUG
@@ -560,7 +594,7 @@ void Shell::withdraw()
     }
     else
     {
-        Logcat::log("ERROR!store命令参数个数错误");
+        Logcat::log("ERROR!withdraw命令参数个数错误");
     }
 }
 
@@ -880,7 +914,7 @@ void Shell::dir()
 
 void Shell::history()
 {
-    printf("  History:\n");
+    printf("History:\n");
     for (int i = 0; i < history_count; i++)
     {
         printf("%3d  %s\n", i + 1, history_buf[i]);
