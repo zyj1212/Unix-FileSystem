@@ -53,9 +53,8 @@ int InodeCache::addInodeCache(DiskInode inode, InodeId inodeId)
     }
     //②可能发生脏inode写回
 
-    inodeCacheArea[pos] = Inode(inode);
-    inodeCacheArea[pos].i_number = inodeId;
-    inodeCacheBitmap.setBit(pos);
+    inodeCacheArea[ramdom_i] = Inode(inode);
+    inodeCacheArea[ramdom_i].i_number = inodeId;
     //③用新的inode覆盖掉
 
     pos = ramdom_i;

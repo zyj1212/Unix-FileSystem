@@ -564,16 +564,20 @@ void Shell::store()
             // 外部文件不存在，将参数1的内容直接作为文本写入
             const char *content = getParam(1);
             int contentLen = strlen(content);
-            if (contentLen > 0)
+            if (contentLen > 0 && fd_des >= 0)
             {
                 bounded_VFS->write(fd_des, (u_int8_t *)content, contentLen);
                 Inode *p_desInode = Kernel::instance()->getInodeCache().getInodeByID(desInodeId);
-                p_desInode->i_size = contentLen;
+                if (p_desInode != NULL) {
+                    p_desInode->i_size = contentLen;
+                }
             }
         }
 
         //Step4：关闭文件
-        bounded_VFS->close(fd_des);
+        if (fd_des >= 0) {
+            bounded_VFS->close(fd_des);
+        }
     }
     else
     {
