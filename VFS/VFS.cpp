@@ -718,20 +718,19 @@ int VFS::write(int fd, u_int8_t *content, int length)
         p_inode->i_size = endOffset;
     }
 
-    while (writeByteCount < length) //NOTE 这里是<还是<=再考虑一下
+    while (writeByteCount < length)
     {
         BlkNum logicBlkno = p_file->f_offset / DISK_BLOCK_SIZE; //逻辑盘块号
-        if (logicBlkno == 1030)
-        {
-            printf("暂时停下");
-        }
         BlkNum phyBlkno = p_inode->Bmap(logicBlkno);            //物理盘块号
+        if (phyBlkno <= 0)
+        {
+            Logcat::log("ERROR!磁盘块分配失败！");
+            return writeByteCount;
+        }
         int offsetInBlock = p_file->f_offset % DISK_BLOCK_SIZE; //块内偏移
-        //NOTE:可能要先读后写！！！
         //当写不满一个盘块的时候，就要先读后写
         if (offsetInBlock == 0 && length - writeByteCount >= DISK_BLOCK_SIZE)
         {
-
             //这种情况不需要先读后写
             pBuf = Kernel::instance()->getBufferCache().GetBlk(phyBlkno);
         }
@@ -743,21 +742,19 @@ int VFS::write(int fd, u_int8_t *content, int length)
 
         u_int8_t *p_buf_byte = (u_int8_t *)pBuf->b_addr;
         p_buf_byte += offsetInBlock;
-        if (length - writeByteCount <= DISK_BLOCK_SIZE - offsetInBlock + 1)
-        { //要读大小<=当前盘块剩下的,读需要的大小
-
+        int bytesLeftInBlock = DISK_BLOCK_SIZE - offsetInBlock;
+        if (length - writeByteCount <= bytesLeftInBlock)
+        {
             memcpy(p_buf_byte, content, length - writeByteCount);
             p_file->f_offset += length - writeByteCount;
             writeByteCount = length;
-            //修改offset
         }
         else
-        { //把剩下的全部读出来
-            memcpy(p_buf_byte, content, DISK_BLOCK_SIZE - offsetInBlock + 1);
-            p_file->f_offset += DISK_BLOCK_SIZE - offsetInBlock + 1;
-            writeByteCount += DISK_BLOCK_SIZE - offsetInBlock + 1;
-
-            //修改offset
+        {
+            memcpy(p_buf_byte, content, bytesLeftInBlock);
+            p_file->f_offset += bytesLeftInBlock;
+            writeByteCount += bytesLeftInBlock;
+            content += bytesLeftInBlock;
         }
         Kernel::instance()->getBufferCache().Bdwrite(pBuf);
     }
