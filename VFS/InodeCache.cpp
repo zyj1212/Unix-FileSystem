@@ -55,6 +55,7 @@ int InodeCache::addInodeCache(DiskInode inode, InodeId inodeId)
 
     inodeCacheArea[ramdom_i] = Inode(inode);
     inodeCacheArea[ramdom_i].i_number = inodeId;
+    inodeCacheArea[ramdom_i].i_flag = 0;  // 替换进去后清除脏标志，防止误写回
     //③用新的inode覆盖掉
 
     pos = ramdom_i;
@@ -64,6 +65,7 @@ int InodeCache::addInodeCache(DiskInode inode, InodeId inodeId)
 
     inodeCacheArea[pos] = Inode(inode);
     inodeCacheArea[pos].i_number = inodeId;
+    inodeCacheArea[pos].i_flag = 0;  // 清除标志
     inodeCacheBitmap.setBit(pos);
   }
   return pos;
