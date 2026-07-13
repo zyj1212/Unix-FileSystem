@@ -31,7 +31,7 @@ Path::Path(const char *raw_path)
         p = strtok(temp_str, "/");
     }
     level = i; /*类似于"/home"这样的属于level=1*/
-    delete path_str;
+    free(path_str);
 }
 
 bool Path::isSingleName() const

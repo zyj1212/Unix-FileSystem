@@ -201,7 +201,7 @@ int Bitmap::getAFreeBitNum()
 
 void Bitmap::clear()
 {
-    memset(bitmap, 0, bitmapSize); //TODO 请确认这句话的正确性。
+    memset(bitmap, 0, sizeof(bitmap));
 }
 /**
  * 有多少个元素
