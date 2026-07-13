@@ -391,7 +391,9 @@ InodeId Ext2::getInodeIdInDir(InodeId dirInodeId, FileName fileName)
     {
         if ((p_directoryEntry->m_ino != 0) && (!strcmp(p_directoryEntry->m_name, fileName)))
         {
-            return p_directoryEntry->m_ino;
+            InodeId retIno = p_directoryEntry->m_ino;
+            Kernel::instance()->getBufferCache().Brelse(pBuf);
+            return retIno;
         }
         p_directoryEntry++;
     }
