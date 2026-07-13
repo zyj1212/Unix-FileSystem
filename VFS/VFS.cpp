@@ -171,6 +171,7 @@ InodeId VFS::createFile(const char *fileName)
         return newFileInode;
     }
     Inode *p_inode = inodeCache->getInodeByID(newFileInode); //并将这个inode写入inodeCache
+    memset(p_inode->i_addr, 0, sizeof(p_inode->i_addr));  // 清空i_addr，防止垃圾数据
     p_inode->i_flag = Inode::IUPD | Inode::IACC;
     p_inode->i_size = 0;
     p_inode->i_mode = Inode::DEFAULT_FILE_MODE;  // 默认 0644
