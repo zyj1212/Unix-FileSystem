@@ -652,9 +652,9 @@ int VFS::read(int fd, u_int8_t *content, int length)
     {
         return 0; // 已超过文件末尾
     }
-    if (length > p_inode->i_size - p_file->f_offset + 1)
+    if (length > p_inode->i_size - p_file->f_offset)
     {
-        length = p_inode->i_size - p_file->f_offset + 1;
+        length = p_inode->i_size - p_file->f_offset;
     }
     if (length <= 0)
     {
@@ -679,21 +679,20 @@ int VFS::read(int fd, u_int8_t *content, int length)
         pBuf = Kernel::instance()->getBufferCache().Bread(phyBlkno);
         u_int8_t *p_buf_byte = (u_int8_t *)pBuf->b_addr;
         p_buf_byte += offsetInBlock;
-        if (length - readByteCount <= DISK_BLOCK_SIZE - offsetInBlock + 1)
+        if (length - readByteCount <= DISK_BLOCK_SIZE - offsetInBlock)
         { //要读大小<=当前盘块剩下的,读需要的大小
 
             memcpy(content, p_buf_byte, length - readByteCount);
             p_file->f_offset += length - readByteCount;
             readByteCount = length;
-            content += length - readByteCount;
             //修改offset
         }
         else
         { //把剩下的全部读出来
-            memcpy(content, p_buf_byte, DISK_BLOCK_SIZE - offsetInBlock + 1);
-            p_file->f_offset += DISK_BLOCK_SIZE - offsetInBlock + 1;
-            readByteCount += DISK_BLOCK_SIZE - offsetInBlock + 1;
-            content += DISK_BLOCK_SIZE - offsetInBlock + 1;
+            memcpy(content, p_buf_byte, DISK_BLOCK_SIZE - offsetInBlock);
+            p_file->f_offset += DISK_BLOCK_SIZE - offsetInBlock;
+            readByteCount += DISK_BLOCK_SIZE - offsetInBlock;
+            content += DISK_BLOCK_SIZE - offsetInBlock;
             //修改offset
         }
         Kernel::instance()->getBufferCache().Brelse(pBuf);
@@ -704,11 +703,28 @@ int VFS::read(int fd, u_int8_t *content, int length)
 int VFS::write(int fd, u_int8_t *content, int length)
 {
     //分析：length可能大于、小于、等于盘块的整数倍
+    if (fd < 0 || content == NULL || length < 0)
+    {
+        Logcat::log("ERROR!write: 无效参数");
+        return -1;
+    }
+
     int writeByteCount = 0;
 
     User &u = VirtualProcess::Instance()->getUser();
     File *p_file = u.u_ofiles.GetF(fd);
+    if (p_file == NULL)
+    {
+        Logcat::log("ERROR!write: 无效文件描述符");
+        return -1;
+    }
+
     Inode *p_inode = inodeCache->getInodeByID(p_file->f_inode_id);
+    if (p_inode == NULL)
+    {
+        Logcat::log("ERROR!write: 无法获取inode");
+        return -1;
+    }
     p_inode->i_flag |= Inode::IUPD;
 
     Buf *pBuf;
