@@ -67,6 +67,8 @@ void Ext2::format()
 
     //②构造DiskInode,修改InodePool,将InodePool写入磁盘img (block 2,3,4)
     InodePool tempInodePool;
+    // 清空整个InodePool，防止未初始化的inode产生垃圾i_addr数据
+    memset(&tempInodePool, 0, sizeof(InodePool));
     int tempAddr[15] = {5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     DiskInode tempDiskInode = DiskInode(Inode::IFDIR | Inode::DEFAULT_DIR_MODE, 1, 0, 0, 6 * sizeof(DirectoryEntry), tempAddr, TimeHelper::getCurTime(), TimeHelper::getCurTime(), TimeHelper::getCurTime());
     tempInodePool.iupdate(1, tempDiskInode);

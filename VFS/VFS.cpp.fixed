@@ -1,0 +1,24 @@
+// This file shows the exact changes needed for VFS::read
+// Apply these 4 fixes manually in the VM
+
+// ===== FIX 1: VFS::read - remove +1 in length calculation =====
+// OLD: if (length > p_inode->i_size - p_file->f_offset + 1)
+// NEW: if (length > p_inode->i_size - p_file->f_offset)
+
+// ===== FIX 2: VFS::read - remove +1 in block remaining =====
+// OLD: DISK_BLOCK_SIZE - offsetInBlock + 1  (two occurrences)
+// NEW: DISK_BLOCK_SIZE - offsetInBlock
+
+// ===== FIX 3: VFS::read - fix content pointer advancement in if branch =====
+// Add: content += length - readByteCount;  AFTER readByteCount = length;
+// Or better: restructure the logic:
+/*
+    int toRead = (length - readByteCount <= bytesLeftInBlock) ? 
+                  (length - readByteCount) : bytesLeftInBlock;
+    memcpy(content, p_buf_byte, toRead);
+    p_file->f_offset += toRead;
+    readByteCount += toRead;
+    content += toRead;
+*/
+
+// ===== FIX 4: VFS::write - add defensive NULL checks at function start =====
