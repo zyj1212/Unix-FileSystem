@@ -649,9 +649,9 @@ int VFS::read(int fd, u_int8_t *content, int length)
     p_inode->i_flag |= Inode::IUPD;
     Buf *pBuf;
 
-    if (p_file->f_offset > p_inode->i_size)
+    if (p_file->f_offset >= p_inode->i_size)
     {
-        return 0; // 已超过文件末尾
+        return 0; // 已超过或达到文件末尾
     }
     if (length > p_inode->i_size - p_file->f_offset)
     {
@@ -789,8 +789,8 @@ bool VFS::eof(FileFd fd)
     if (p_file == NULL) return true;
     Inode *p_inode = inodeCache->getInodeByID(p_file->f_inode_id);
     if (p_inode == NULL) return true;
-    // 当偏移量 > 文件大小时，到达文件末尾
-    return p_file->f_offset > p_inode->i_size;
+    // 当偏移量 >= 文件大小时，到达文件末尾
+    return p_file->f_offset >= p_inode->i_size;
 }
 
 void VFS::registerExt2(Ext2 *p_ext2)
